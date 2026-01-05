@@ -87,3 +87,4 @@ npm run dev:mobile
 ## Architecture docs
 
 - `docs/arquitetura/exemplo-modulo.md`
+# slithermoney
