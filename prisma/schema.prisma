@@ -1,0 +1,221 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Account {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status         String            @default("active")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @default(now()) @map("updated_at")
+  identityProfile IdentityProfile?
+  wallet         Wallet?
+  ledgerEntries  LedgerEntry[]
+  pixTransactions PixTransaction[]
+  runs           Run[]
+  adminAuditLogs AdminAuditLog[]   @relation("AdminAuditActor")
+  fraudFlags     FraudFlag[]
+
+  @@map("accounts")
+}
+
+model IdentityProfile {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId  String   @map("account_id") @db.Uuid
+  fullName   String   @map("full_name")
+  cpf        String
+  pixKey     String   @map("pix_key")
+  pixKeyType String   @map("pix_key_type")
+  status     String   @default("pending")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId])
+  @@unique([cpf])
+  @@map("identity_profiles")
+}
+
+model Wallet {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId             String   @map("account_id") @db.Uuid
+  availableBalanceCents BigInt   @default(0) @map("available_balance_cents") @db.BigInt
+  inGameBalanceCents    BigInt   @default(0) @map("in_game_balance_cents") @db.BigInt
+  blockedBalanceCents   BigInt   @default(0) @map("blocked_balance_cents") @db.BigInt
+  currency              String   @default("BRL")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @map("updated_at")
+
+  account       Account       @relation(fields: [accountId], references: [id])
+  ledgerEntries LedgerEntry[] @relation("WalletLedger")
+
+  @@unique([accountId])
+  @@map("wallets")
+}
+
+model LedgerEntry {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId         String   @map("account_id") @db.Uuid
+  walletId          String?  @map("wallet_id") @db.Uuid
+  entryType         String   @map("entry_type")
+  direction         String
+  amountCents       BigInt   @map("amount_cents") @db.BigInt
+  currency          String   @default("BRL")
+  referenceType     String?  @map("reference_type")
+  referenceId       String?  @map("reference_id")
+  externalReference String?  @map("external_reference")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  wallet  Wallet? @relation("WalletLedger", fields: [walletId], references: [id])
+
+  @@index([accountId, createdAt])
+  @@index([entryType])
+  @@index([externalReference])
+  @@index([referenceType, referenceId])
+  @@map("ledger_entries")
+}
+
+model PixTransaction {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId        String   @map("account_id") @db.Uuid
+  txType           String   @map("tx_type")
+  status           String
+  amountCents      BigInt   @map("amount_cents") @db.BigInt
+  currency         String   @default("BRL")
+  idempotencyKey   String   @map("idempotency_key")
+  txid             String?
+  e2eId            String?  @map("e2e_id")
+  provider         String?
+  externalReference String? @map("external_reference")
+  payload          Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @map("updated_at")
+  completedAt      DateTime? @map("completed_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([idempotencyKey])
+  @@unique([txid])
+  @@unique([e2eId])
+  @@index([accountId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([externalReference])
+  @@map("pix_transactions")
+}
+
+model Arena {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  region          String
+  status          String   @default("offline")
+  host            String
+  port            Int
+  capacity        Int      @default(0)
+  currentPlayers  Int      @default(0) @map("current_players")
+  lastHeartbeatAt DateTime? @map("last_heartbeat_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  runs Run[]
+
+  @@unique([name])
+  @@index([status, region])
+  @@map("arenas")
+}
+
+model Run {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId     String   @map("account_id") @db.Uuid
+  arenaId       String?  @map("arena_id") @db.Uuid
+  stakeCents    BigInt   @map("stake_cents") @db.BigInt
+  status        String
+  multiplier    Decimal  @db.Decimal(10, 4) @default(0)
+  payoutCents   BigInt   @default(0) @map("payout_cents") @db.BigInt
+  houseFeeCents BigInt   @default(0) @map("house_fee_cents") @db.BigInt
+  resultReason  String?  @map("result_reason")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @map("updated_at")
+  endedAt       DateTime? @map("ended_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  arena   Arena?  @relation(fields: [arenaId], references: [id])
+
+  @@index([accountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("runs")
+}
+
+model AdminAuditLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorAccountId String?  @map("actor_account_id") @db.Uuid
+  action         String
+  targetType     String?  @map("target_type")
+  targetId       String?  @map("target_id")
+  beforeData     Json?    @map("before_data")
+  afterData      Json?    @map("after_data")
+  metadata       Json?
+  requestId      String?  @map("request_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  actorAccount Account? @relation("AdminAuditActor", fields: [actorAccountId], references: [id])
+
+  @@index([actorAccountId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("admin_audit_logs")
+}
+
+model FraudFlag {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId  String?  @map("account_id") @db.Uuid
+  flagType   String   @map("flag_type")
+  severity   String   @default("medium")
+  status     String   @default("open")
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @map("updated_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  account Account? @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("fraud_flags")
+}
+
+model Stake {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label       String
+  amountCents BigInt   @map("amount_cents") @db.BigInt
+  currency    String   @default("BRL")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@unique([amountCents])
+  @@index([isActive, sortOrder])
+  @@map("stakes")
+}
+
+model SizeMultiplier {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  minSize    Int      @map("min_size")
+  maxSize    Int      @map("max_size")
+  multiplier Decimal  @db.Decimal(10, 4)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @map("updated_at")
+
+  @@index([isActive, minSize, maxSize])
+  @@map("size_multipliers")
+}

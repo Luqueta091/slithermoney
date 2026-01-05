@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Slither-like — clone perf</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hud">
+    <div id="topbar">
+      <div id="title">Slither-like</div>
+      <div id="status">conectando…</div>
+    </div>
+
+    <div id="leaderboard">
+      <div class="lb-title">Leaderboard</div>
+      <ol id="lb"></ol>
+    </div>
+
+    <div id="minimap-wrap">
+      <canvas id="minimap" width="140" height="140"></canvas>
+    </div>
+
+    <div id="join" class="panel">
+      <div class="panel-title">Entrar</div>
+      <input id="name" maxlength="16" placeholder="seu nome" />
+      <button id="play">Jogar</button>
+      <div class="hint">
+        Mouse = direção • Espaço/Click = boost • Scroll = zoom
+      </div>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

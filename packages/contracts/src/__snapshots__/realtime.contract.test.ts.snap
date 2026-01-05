@@ -1,0 +1,122 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`realtime contracts > matches snapshot examples 1`] = `
+{
+  "cashoutHoldExample": {
+    "hold_ms": 1500,
+  },
+  "cashoutRequestExample": {
+    "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  },
+  "cashoutResultExample": {
+    "multiplier": 1.5,
+    "run_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "ok",
+  },
+  "helloExample": {
+    "join_token": "join-token",
+    "protocol_version": 3,
+    "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  },
+  "inputExample": {
+    "boost": true,
+    "client_time_ms": 123456,
+    "direction": {
+      "x": 0.6,
+      "y": -0.8,
+    },
+    "seq": 12,
+  },
+  "joinExample": {
+    "desired_skin": "default",
+    "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  },
+  "runCashoutExample": {
+    "eventVersion": 1,
+    "multiplier": 1.5,
+    "runId": "550e8400-e29b-41d4-a716-446655440000",
+    "sizeScore": 120,
+  },
+  "runEliminatedExample": {
+    "eventVersion": 1,
+    "multiplier": 1.1,
+    "reason": "disconnect",
+    "runId": "550e8400-e29b-41d4-a716-446655440000",
+    "sizeScore": 42,
+  },
+  "snapshotExample": {
+    "pellet_events": [
+      {
+        "pellet": {
+          "hue": 300,
+          "id": "pellet-3",
+          "radius": 3.4,
+          "value": 2,
+          "x": 10,
+          "y": 12,
+        },
+        "type": "spawn",
+      },
+      {
+        "id": "pellet-2",
+        "type": "delete",
+      },
+    ],
+    "pellets": [
+      {
+        "hue": 120,
+        "id": "pellet-1",
+        "radius": 3.4,
+        "value": 5,
+        "x": 20,
+        "y": 40,
+      },
+      {
+        "hue": 220,
+        "id": "pellet-2",
+        "radius": 3.4,
+        "value": 10,
+        "x": -80,
+        "y": -20,
+      },
+    ],
+    "players": [
+      {
+        "angle": 1.2,
+        "boost": false,
+        "color": "#FF6B4A",
+        "hue": 24,
+        "id": "player-1",
+        "multiplier": 1.25,
+        "name": "Ana Souza",
+        "radius": 10,
+        "segments": [
+          {
+            "x": 120,
+            "y": -45,
+          },
+          {
+            "x": 118,
+            "y": -46,
+          },
+          {
+            "x": 116,
+            "y": -47,
+          },
+        ],
+        "size_score": 140,
+        "x": 120,
+        "y": -45,
+      },
+    ],
+    "room_id": "room-1",
+    "tick": 120,
+    "world_radius": 3000,
+  },
+  "welcomeExample": {
+    "player_id": "player-1",
+    "snapshot_rate": 10,
+    "tick_rate": 20,
+  },
+}
+`;

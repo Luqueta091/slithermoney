@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: slithermoney
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d slithermoney"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/slithermoney?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run db:migrate
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run typecheck
+
+  build-packages:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/slithermoney?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build:packages
+
+  build-apps:
+    runs-on: ubuntu-latest
+    needs: build-packages
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, game-server, worker, backoffice, mobile]
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/slithermoney?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build:packages
+      - run: npm -w apps/${{ matrix.app }} run build
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [quality, build-apps]
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.STAGING_DATABASE_URL != '' }}
+    environment: staging
+    env:
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      GIT_SHA: ${{ github.sha }}
+      SMOKE_API_URL: ${{ secrets.STAGING_SMOKE_API_URL }}
+      SMOKE_GAME_URL: ${{ secrets.STAGING_SMOKE_GAME_URL }}
+      SMOKE_BACKOFFICE_URL: ${{ secrets.STAGING_SMOKE_BACKOFFICE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run db:migrate
+      - name: Deploy staging
+        run: |
+          echo "Deploy staging placeholder for $GIT_SHA"
+      - name: Smoke test
+        run: ./scripts/smoke-test.sh

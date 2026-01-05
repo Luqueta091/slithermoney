@@ -1,0 +1,166 @@
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import {
+  ApiError,
+  getIdentity,
+  type IdentityInput,
+  type IdentityProfile,
+  upsertIdentity,
+} from '../api/client';
+import { clearSession, loadSession, saveSession } from '../storage/session';
+import { generateAccountId } from '../utils/uuid';
+import { isUuid } from '../utils/validation';
+
+type AuthStatus = 'loading' | 'signedOut' | 'needsIdentity' | 'signedIn';
+
+type AuthContextValue = {
+  status: AuthStatus;
+  accountId: string | null;
+  identity: IdentityProfile | null;
+  error: string | null;
+  signIn: (accountId: string) => Promise<void>;
+  signUp: () => Promise<void>;
+  completeIdentity: (input: IdentityInput) => Promise<void>;
+  signOut: () => void;
+  resetError: () => void;
+};
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
+  const [status, setStatus] = useState<AuthStatus>('loading');
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<IdentityProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    bootstrap();
+  }, []);
+
+  const bootstrap = (): void => {
+    const stored = loadSession();
+    if (!stored) {
+      setStatus('signedOut');
+      return;
+    }
+
+    setAccountId(stored);
+    void refreshIdentity(stored);
+  };
+
+  const refreshIdentity = async (id: string): Promise<void> => {
+    try {
+      const profile = await getIdentity(id);
+      setIdentity(profile);
+      setStatus('signedIn');
+    } catch (err) {
+      const resolved = resolveError(err);
+      if (resolved.code === 'identity_not_found') {
+        setIdentity(null);
+        setStatus('needsIdentity');
+        return;
+      }
+
+      setError(resolved.message);
+      clearSession();
+      setAccountId(null);
+      setStatus('signedOut');
+    }
+  };
+
+  const signIn = async (id: string): Promise<void> => {
+    setError(null);
+    const trimmed = id.trim();
+    if (!isUuid(trimmed)) {
+      setError('Account id invalido');
+      return;
+    }
+
+    saveSession(trimmed);
+    setAccountId(trimmed);
+    await refreshIdentity(trimmed);
+  };
+
+  const signUp = async (): Promise<void> => {
+    setError(null);
+    const newId = generateAccountId();
+    saveSession(newId);
+    setAccountId(newId);
+    setIdentity(null);
+    setStatus('needsIdentity');
+  };
+
+  const completeIdentity = async (input: IdentityInput): Promise<void> => {
+    if (!accountId) {
+      setError('Sessao invalida');
+      return;
+    }
+
+    setError(null);
+    try {
+      const profile = await upsertIdentity(accountId, input);
+      setIdentity(profile);
+      setStatus('signedIn');
+    } catch (err) {
+      const resolved = resolveError(err);
+      setError(resolved.message);
+    }
+  };
+
+  const signOut = (): void => {
+    clearSession();
+    setAccountId(null);
+    setIdentity(null);
+    setStatus('signedOut');
+  };
+
+  const resetError = (): void => {
+    setError(null);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        status,
+        accountId,
+        identity,
+        error,
+        signIn,
+        signUp,
+        completeIdentity,
+        signOut,
+        resetError,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+
+  return ctx;
+}
+
+type ResolvedError = {
+  message: string;
+  code?: string;
+};
+
+function resolveError(error: unknown): ResolvedError {
+  if (error instanceof ApiError) {
+    return {
+      message: error.message,
+      code: error.code,
+    };
+  }
+
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+
+  return { message: 'Erro inesperado' };
+}

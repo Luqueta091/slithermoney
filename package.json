@@ -1,0 +1,54 @@
+{
+  "name": "slithermoney",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "node scripts/dev-all.js",
+    "dev:all": "node scripts/dev-all.js",
+    "dev": "npm run build:packages && npm run db:generate && npm -w apps/api run dev",
+    "dev:api": "npm run build:packages && npm run db:generate && npm -w apps/api run dev",
+    "dev:game": "npm run build:packages && npm -w apps/game-server run dev",
+    "dev:worker": "npm run build:packages && npm -w apps/worker run dev",
+    "dev:backoffice": "npm run build:packages && npm -w apps/backoffice run dev",
+    "dev:mobile": "npm -w apps/mobile run dev",
+    "infra:up": "./infra/dev-up.sh",
+    "infra:down": "./infra/dev-down.sh",
+    "build:packages": "npm -w packages/shared run build && npm -w packages/contracts run build && npm -w packages/core run build",
+    "build:apps": "npm -w apps/api run build && npm -w apps/game-server run build && npm -w apps/worker run build && npm -w apps/backoffice run build",
+    "build": "npm run build:packages && npm run build:apps",
+    "typecheck:packages": "npm run build:packages",
+    "typecheck:apps": "npm -w apps/api run typecheck && npm -w apps/game-server run typecheck && npm -w apps/worker run typecheck && npm -w apps/backoffice run typecheck",
+    "typecheck": "npm run typecheck:packages && npm run typecheck:apps",
+    "test": "npm run build:packages && vitest run",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
+    "db:migrate": "prisma migrate deploy",
+    "db:dev": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "smoke:test": "./scripts/smoke-test.sh",
+    "load:api": "node scripts/load-test-api.js",
+    "load:game": "node scripts/load-test-game.js",
+    "security:scan": "npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prisma": "^7.2.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^1.6.0"
+  }
+}

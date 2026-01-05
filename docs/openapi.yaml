@@ -1,0 +1,807 @@
+openapi: 3.0.3
+info:
+  title: SlitherMoney API
+  version: 0.1.0
+paths:
+  /identity:
+    post:
+      summary: Create or update identity
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityInput'
+      responses:
+        '200':
+          description: Identity saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityProfile'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing user id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /identity/me:
+    get:
+      summary: Get current identity
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityProfile'
+        '404':
+          description: Identity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /wallet/me:
+    get:
+      summary: Get wallet balances
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Wallet balances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletResponse'
+        '400':
+          description: Invalid account id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing user id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /ledger/me:
+    get:
+      summary: Get ledger statement
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: desc
+        - in: query
+          name: type
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/LedgerEntryType'
+          style: form
+          explode: true
+        - in: query
+          name: types
+          description: Comma separated list of entry types.
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Ledger statement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerStatementResponse'
+        '400':
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing user id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /pix/deposits:
+    post:
+      summary: Create Pix deposit charge
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: x-idempotency-key
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PixDepositInput'
+      responses:
+        '200':
+          description: Pix charge created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixDepositResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing user id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Identity incomplete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /pix/webhook:
+    post:
+      summary: Confirm Pix deposit webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PixWebhookInput'
+      responses:
+        '200':
+          description: Pix deposit confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixWebhookResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Pix transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Pix transaction conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /pix/withdrawals:
+    post:
+      summary: Request Pix withdrawal
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: x-idempotency-key
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PixWithdrawalInput'
+      responses:
+        '200':
+          description: Withdrawal requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixWithdrawalResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing user id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Identity incomplete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /runs/start:
+    post:
+      summary: Start a run and reserve stake
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunStartInput'
+      responses:
+        '200':
+          description: Run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunStartResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing user id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Insufficient balance or invalid stake
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /runs/events/eliminated:
+    post:
+      summary: Run eliminated event (game-server)
+      parameters:
+        - in: header
+          name: x-game-server-key
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunEliminatedInput'
+      responses:
+        '200':
+          description: Run updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunEliminatedResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /runs/events/cashout:
+    post:
+      summary: Run cashout event (game-server)
+      parameters:
+        - in: header
+          name: x-game-server-key
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunCashoutInput'
+      responses:
+        '200':
+          description: Run cashed out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunCashoutResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    IdentityInput:
+      type: object
+      required:
+        - fullName
+        - cpf
+        - pixKey
+        - pixKeyType
+      properties:
+        fullName:
+          type: string
+        cpf:
+          type: string
+        pixKey:
+          type: string
+        pixKeyType:
+          type: string
+          enum:
+            - cpf
+            - phone
+            - email
+            - random
+    IdentityProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        cpf:
+          type: string
+        pix_key:
+          type: string
+        pix_key_type:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    WalletResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        available_balance_cents:
+          type: string
+        in_game_balance_cents:
+          type: string
+        blocked_balance_cents:
+          type: string
+        currency:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    LedgerEntryType:
+      type: string
+      enum:
+        - DEPOSIT
+        - STAKE_RESERVED
+        - STAKE_RELEASED
+        - STAKE_LOST
+        - PRIZE
+        - HOUSE_FEE
+        - WITHDRAW_REQUEST
+        - WITHDRAW_PAID
+        - WITHDRAW_FAILED
+        - ADMIN_ADJUST
+    LedgerDirection:
+      type: string
+      enum:
+        - CREDIT
+        - DEBIT
+    LedgerEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        wallet_id:
+          type: string
+          format: uuid
+          nullable: true
+        entry_type:
+          $ref: '#/components/schemas/LedgerEntryType'
+        direction:
+          $ref: '#/components/schemas/LedgerDirection'
+        amount_cents:
+          type: string
+        currency:
+          type: string
+        reference_type:
+          type: string
+          nullable: true
+        reference_id:
+          type: string
+          nullable: true
+        external_reference:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    LedgerStatementResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerEntry'
+        pagination:
+          type: object
+          properties:
+            limit:
+              type: integer
+            offset:
+              type: integer
+            total:
+              type: integer
+    PixDepositInput:
+      type: object
+      required:
+        - amountCents
+      properties:
+        amountCents:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+    PixTransactionStatus:
+      type: string
+      enum:
+        - PENDING
+        - CONFIRMED
+        - FAILED
+        - REQUESTED
+        - PAID
+    PixChargePayload:
+      type: object
+      properties:
+        qr_code:
+          type: string
+        copy_and_paste:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    PixDepositResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PixTransactionStatus'
+        amount_cents:
+          type: string
+        currency:
+          type: string
+        idempotency_key:
+          type: string
+        txid:
+          type: string
+          nullable: true
+        payload:
+          $ref: '#/components/schemas/PixChargePayload'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    PixWebhookInput:
+      type: object
+      required:
+        - txid
+        - amountCents
+      properties:
+        txid:
+          type: string
+        e2eId:
+          type: string
+        amountCents:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+    PixWebhookResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PixTransactionStatus'
+        txid:
+          type: string
+        e2e_id:
+          type: string
+          nullable: true
+        amount_cents:
+          type: string
+        currency:
+          type: string
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+    PixWithdrawalInput:
+      type: object
+      required:
+        - amountCents
+      properties:
+        amountCents:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+    PixWithdrawalResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PixTransactionStatus'
+        amount_cents:
+          type: string
+        currency:
+          type: string
+        idempotency_key:
+          type: string
+        external_reference:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    RunStartInput:
+      type: object
+      required:
+        - stakeCents
+      properties:
+        stakeCents:
+          type: integer
+          minimum: 1
+    RunStartResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        stake_cents:
+          type: string
+        currency:
+          type: string
+        arena_host:
+          type: string
+        join_token:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    RunEliminatedInput:
+      type: object
+      required:
+        - runId
+        - eventVersion
+      properties:
+        runId:
+          type: string
+          format: uuid
+        eventVersion:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+        sizeScore:
+          type: integer
+          minimum: 0
+        multiplier:
+          type: number
+    RunEliminatedResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        result_reason:
+          type: string
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+    RunCashoutInput:
+      type: object
+      required:
+        - runId
+        - eventVersion
+        - multiplier
+      properties:
+        runId:
+          type: string
+          format: uuid
+        eventVersion:
+          type: integer
+          minimum: 1
+        multiplier:
+          type: number
+        sizeScore:
+          type: integer
+          minimum: 0
+    RunCashoutResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        payout_cents:
+          type: string
+        house_fee_cents:
+          type: string
+        multiplier:
+          type: number
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true

@@ -1,0 +1,17 @@
+{
+  "name": "@slithermoney/game-server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@slithermoney/contracts": "*",
+    "@slithermoney/shared": "*",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  }
+}

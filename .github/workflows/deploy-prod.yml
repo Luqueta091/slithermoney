@@ -1,0 +1,35 @@
+name: deploy-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: true
+        default: main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    if: ${{ secrets.PROD_DATABASE_URL != '' }}
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      GIT_SHA: ${{ github.sha }}
+      SMOKE_API_URL: ${{ secrets.PROD_SMOKE_API_URL }}
+      SMOKE_GAME_URL: ${{ secrets.PROD_SMOKE_GAME_URL }}
+      SMOKE_BACKOFFICE_URL: ${{ secrets.PROD_SMOKE_BACKOFFICE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run db:migrate
+      - name: Deploy production
+        run: |
+          echo "Deploy production placeholder for $GIT_SHA"
+      - name: Smoke test
+        run: ./scripts/smoke-test.sh
