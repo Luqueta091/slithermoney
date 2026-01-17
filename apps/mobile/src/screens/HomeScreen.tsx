@@ -92,69 +92,8 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
     }
   };
 
-  const renderContent = (): JSX.Element => {
-    switch (tab) {
-      case 'deposit':
-        return <DepositScreen accountId={accountId} onConfirmed={refreshWallet} />;
-      case 'withdraw':
-        return <WithdrawScreen accountId={accountId} onUpdated={refreshWallet} />;
-      case 'history':
-        return <HistoryScreen accountId={accountId} />;
-      case 'lobby':
-      default:
-        return (
-          <div className="card">
-            <div className="card__label">Saldo</div>
-            <div className="card__value">{formatCents(wallet?.available_balance_cents ?? '0')}</div>
-            <div className="card__label">Em jogo</div>
-            <div className="card__value">{formatCents(wallet?.in_game_balance_cents ?? '0')}</div>
-            <div className="card__label">Stake rapida</div>
-            <div className="chips">
-              {stakes.map((stake) => (
-                <button
-                  key={stake.id}
-                  type="button"
-                  className={`chip ${stake.id === selectedStakeId ? 'active' : ''}`}
-                  onClick={() => {
-                    setCustomStake('');
-                    setSelectedStakeId(stake.id);
-                  }}
-                >
-                  {stake.label}
-                </button>
-              ))}
-            </div>
-
-            <label className="form-field">
-              <span className="form-label">Stake custom (R$)</span>
-              <input
-                className="form-input"
-                value={customStake}
-                onChange={(event) => {
-                  setError(null);
-                  setCustomStake(event.target.value);
-                }}
-                placeholder="Ex: 15,00"
-              />
-              <span className="form-helper">A stake sera reservada ao iniciar a run.</span>
-            </label>
-
-            {error ? <p className="error">{error}</p> : null}
-
-            <div className="actions">
-              <ActionButton
-                label={loadingRun ? 'Iniciando...' : 'Iniciar run'}
-                onClick={handleStartRun}
-                disabled={loadingRun}
-              />
-              <ActionButton label="Atualizar saldo" onClick={refreshWallet} variant="ghost" />
-            </div>
-          </div>
-        );
-    }
-  };
-
-  if (tab === 'play') {
+  // If playing, show simple GameScreen
+  if (tab === 'play' || (tab === 'play' && run)) {
     return (
       <GameScreen
         run={run}
@@ -167,32 +106,158 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
     );
   }
 
+  // Helper to render other views (Deposit, Withdraw, History) inside a "Back" capable container
+  // accessing them from the main lobby
+  if (tab !== 'lobby') {
+    let content: JSX.Element | null = null;
+    switch (tab) {
+      case 'deposit':
+        content = <DepositScreen accountId={accountId} onConfirmed={refreshWallet} />;
+        break;
+      case 'withdraw':
+        content = <WithdrawScreen accountId={accountId} onUpdated={refreshWallet} />;
+        break;
+      case 'history':
+        content = <HistoryScreen accountId={accountId} />;
+        break;
+    }
+
+    return (
+      <ScreenContainer>
+        <div className="actions" style={{ marginBottom: 20 }}>
+          <ActionButton label="Voltar para o Jogo" onClick={() => setTab('lobby')} variant="ghost" />
+        </div>
+        {content}
+      </ScreenContainer>
+    );
+  }
+
+  // LOBBY VIEW (Slither Style)
   return (
-    <ScreenContainer>
-      <div className="hero">
-        <p className="kicker">Conta ativa</p>
-        <h1 className="title">{identity?.full_name ?? 'Jogador'}</h1>
+    <div className="slither-container">
+      {/* Background/Particles could go here if we had them */}
+      <div className="slither-background" />
+
+      {/* Top Left: Identity */}
+      <div className="slither-corner top-left">
+        <div className="slither-text">
+          <strong>{identity?.full_name ?? 'Jogador'}</strong>
+        </div>
+        <button type="button" className="slither-link" onClick={onSignOut}>
+          Sair
+        </button>
       </div>
 
-      <div className="tabs">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`tab ${tab === item.id ? 'active' : ''}`}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+      {/* Top Right: Wallet */}
+      <div className="slither-corner top-right">
+        <div className="slither-text">
+          Sua Carteira
+        </div>
+        <div className="slither-text" style={{ fontSize: 18, color: '#fff' }}>
+          {formatCents(wallet?.available_balance_cents ?? '0')}
+        </div>
       </div>
 
-      {renderContent()}
+      {/* Center: Title & Play Form */}
+      <div className="slither-center">
+        <h1 className="slither-logo">
+          slither<span>.money</span>
+        </h1>
 
-      <div className="actions">
-        <ActionButton label="Sair" onClick={onSignOut} variant="ghost" />
+        <div className="slither-input-wrapper">
+          <input
+            className="slither-input"
+            value={customStake}
+            onChange={(event) => {
+              setError(null);
+              setCustomStake(event.target.value);
+              // Clear simple stake selection if typing custom
+              if (event.target.value) setSelectedStakeId(null);
+            }}
+            placeholder="Valor da aposta (R$)"
+          />
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+            {stakes.slice(0, 3).map((stake) => (
+              <button
+                key={stake.id}
+                type="button"
+                onClick={() => {
+                  setCustomStake('');
+                  setSelectedStakeId(stake.id);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 12,
+                  color: stake.id === selectedStakeId ? '#4ade80' : 'rgba(255,255,255,0.5)',
+                  padding: '4px 8px',
+                  fontSize: 12,
+                  cursor: 'pointer'
+                }}
+              >
+                {stake.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error ? <p className="error" style={{ textAlign: 'center' }}>{error}</p> : null}
+
+        <button
+          className="slither-button"
+          onClick={handleStartRun}
+          disabled={loadingRun}
+        >
+          {loadingRun ? 'Carregando' : 'Joga'}
+        </button>
+
+        {loadingRun && <div className="spinner" />}
       </div>
-    </ScreenContainer>
+
+      {/* Bottom Left: Actions */}
+      <div className="slither-corner bottom-left">
+        <div className="slither-link-column" onClick={() => setTab('deposit')}>
+          <div className="slither-link-icon">
+            <span style={{ fontSize: 24, color: '#e2e8f0' }}>+</span>
+          </div>
+          <span className="slither-link-label">Depositar</span>
+        </div>
+      </div>
+
+      {/* Bottom Right: History/Withdraw */}
+      <div className="slither-corner bottom-right">
+        <div style={{ display: 'flex', gap: 24 }}>
+          <div className="slither-link-column" onClick={() => setTab('withdraw')}>
+            <div className="slither-link-icon">
+              <span style={{ fontSize: 24, color: '#e2e8f0' }}>$</span>
+            </div>
+            <span className="slither-link-label">Sacar</span>
+          </div>
+          <div className="slither-link-column" onClick={() => setTab('history')}>
+            <div className="slither-link-icon">
+              <span style={{ fontSize: 24, color: '#e2e8f0' }}>H</span>
+            </div>
+            <span className="slither-link-label">Histórico</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Very Bottom: Footer Links */}
+      <div style={{
+        position: 'absolute',
+        bottom: 10,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        gap: 16,
+        opacity: 0.5
+      }}>
+        <span className="slither-text" style={{ fontSize: 10 }}>privacy</span>
+        <span className="slither-text" style={{ fontSize: 10 }}>terms</span>
+        <span className="slither-text" style={{ fontSize: 10 }}>contact</span>
+      </div>
+
+    </div>
   );
 }
 

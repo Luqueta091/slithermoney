@@ -189,6 +189,9 @@ export async function getWallet(accountId: string): Promise<Wallet> {
 
 export async function listStakes(): Promise<Stake[]> {
   const response = await apiRequest<{ items: Stake[] }>('/stakes', { method: 'GET' });
+  if (!response || !Array.isArray(response.items)) {
+    return [];
+  }
   return response.items;
 }
 

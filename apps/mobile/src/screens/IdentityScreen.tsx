@@ -60,11 +60,6 @@ export function IdentityScreen({
       </div>
 
       <div className="card">
-        <span className="card__label">Account id</span>
-        <span className="card__value">{accountId}</span>
-      </div>
-
-      <div className="card">
         <InputField
           label="Nome completo"
           value={fullName}

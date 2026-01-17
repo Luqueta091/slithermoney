@@ -27,8 +27,6 @@ export function LobbyScreen({ identity, accountId, onSignOut }: LobbyScreenProps
       </div>
 
       <div className="card">
-        <span className="card__label">Conta</span>
-        <span className="card__value">{accountId}</span>
         <span className="card__label">Perfil</span>
         <span className="card__value">{identity?.full_name ?? 'Nao informado'}</span>
         <span className="card__label">Pix</span>
