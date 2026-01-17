@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../shared/database/prisma';
 import { logger } from '../shared/observability/logger';
 import { recordLedgerDivergenceDetected, recordLedgerDivergenceRepaired } from '../shared/observability/metrics';
@@ -81,7 +82,7 @@ export async function reconcileConfirmedDeposits(options: {
 }
 
 async function repairConfirmedDeposit(deposit: ConfirmedDeposit): Promise<boolean> {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const current = await tx.pixTransaction.findUnique({
       where: { id: deposit.id },
       select: {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../shared/database/prisma';
 import { logger } from '../shared/observability/logger';
 import {
@@ -67,7 +68,7 @@ async function processWithdrawal(withdrawal: {
 
   if (payout.status === 'PAID') {
     let updated = false;
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const updateResult = await tx.pixTransaction.updateMany({
         where: { id: withdrawal.id, status: 'REQUESTED' },
         data: {
@@ -131,7 +132,7 @@ async function processWithdrawal(withdrawal: {
   }
 
   let updated = false;
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const updateResult = await tx.pixTransaction.updateMany({
       where: { id: withdrawal.id, status: 'REQUESTED' },
       data: {
