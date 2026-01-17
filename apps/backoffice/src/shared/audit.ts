@@ -8,9 +8,9 @@ export type AuditLogInput = {
   actorRole?: string;
   targetType?: string;
   targetId?: string;
-  beforeData?: Record<string, unknown> | null;
-  afterData?: Record<string, unknown> | null;
-  metadata?: Record<string, unknown> | null;
+  beforeData?: Prisma.InputJsonValue | null;
+  afterData?: Prisma.InputJsonValue | null;
+  metadata?: Prisma.InputJsonValue | null;
 };
 
 export async function recordAuditLog(
@@ -20,10 +20,14 @@ export async function recordAuditLog(
   const { request_id } = getRequestContext();
   const actorAccountId = input.actorUserId && isUuid(input.actorUserId) ? input.actorUserId : undefined;
 
+  const baseMetadata =
+    input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+      ? (input.metadata as Record<string, Prisma.InputJsonValue>)
+      : {};
   const metadata = compactRecord({
-    ...(input.metadata ?? {}),
-    actor_role: input.actorRole,
-    actor_user_id: input.actorUserId,
+    ...baseMetadata,
+    ...(input.actorRole ? { actor_role: input.actorRole } : {}),
+    ...(input.actorUserId ? { actor_user_id: input.actorUserId } : {}),
   });
 
   await prisma.adminAuditLog.create({
@@ -40,7 +44,7 @@ export async function recordAuditLog(
   });
 }
 
-function compactRecord(record: Record<string, unknown>): Record<string, unknown> {
+function compactRecord(record: Record<string, Prisma.InputJsonValue>): Record<string, Prisma.InputJsonValue> {
   const entries = Object.entries(record).filter(([, value]) => value !== undefined);
   return Object.fromEntries(entries);
 }

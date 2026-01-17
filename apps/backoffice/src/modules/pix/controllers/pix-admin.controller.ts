@@ -95,8 +95,8 @@ export async function handlePixReprocess(req: IncomingMessage, res: ServerRespon
 
 type DepositRepairResult = {
   repaired: boolean;
-  before: Record<string, unknown> | null;
-  after: Record<string, unknown> | null;
+  before: Prisma.InputJsonValue | null;
+  after: Prisma.InputJsonValue | null;
 };
 
 async function reprocessDeposit(
@@ -174,10 +174,10 @@ async function reprocessDeposit(
     repaired: true,
     before: {
       wallet: snapshotWallet(walletBefore),
-    },
+    } as Prisma.InputJsonValue,
     after: {
       wallet: snapshotWallet(wallet),
-    },
+    } as Prisma.InputJsonValue,
   };
 }
 
@@ -189,9 +189,10 @@ type WithdrawalResolutionResult = {
     amountCents: bigint;
     currency: string;
     status: string;
+    txType: string;
   };
-  before: Record<string, unknown> | null;
-  after: Record<string, unknown> | null;
+  before: Prisma.InputJsonValue | null;
+  after: Prisma.InputJsonValue | null;
 };
 
 async function resolveWithdrawal(
@@ -202,6 +203,7 @@ async function resolveWithdrawal(
     amountCents: bigint;
     currency: string;
     status: string;
+    txType: string;
     txid?: string | null;
     externalReference?: string | null;
   },
@@ -245,7 +247,7 @@ async function resolveWithdrawal(
   const before = {
     transaction_status: transaction.status,
     wallet: snapshotWallet(walletBefore),
-  };
+  } as Prisma.InputJsonValue;
 
   if (!walletBefore) {
     throw new HttpError(409, 'wallet_not_found', 'Carteira nao encontrada');
@@ -308,7 +310,7 @@ async function resolveWithdrawal(
       after: {
         transaction_status: updatedTransaction?.status ?? 'PAID',
         wallet: snapshotWallet(walletAfter),
-      },
+      } as Prisma.InputJsonValue,
     };
   }
 
@@ -369,7 +371,7 @@ async function resolveWithdrawal(
     after: {
       transaction_status: updatedTransaction?.status ?? 'FAILED',
       wallet: snapshotWallet(walletAfter),
-    },
+    } as Prisma.InputJsonValue,
   };
 }
 

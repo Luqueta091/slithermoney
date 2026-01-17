@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { PixTransaction, PrismaClient } from '@prisma/client';
+import { PixTransactionStatus, PixTransactionType } from '../dtos/criar-cobranca.dto';
 import { CarteirasRepository } from '../../carteiras/repository/carteiras.repository';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { HttpError } from '../../../shared/http/http-error';
@@ -68,7 +69,7 @@ export class ConfirmarDepositoService {
           throw new HttpError(409, 'pix_transaction_conflict', 'Transacao Pix falhou');
         }
 
-        return current;
+        return mapPixTransaction(current);
       }
 
       confirmationMs = Date.now() - transaction.createdAt.getTime();
@@ -112,4 +113,24 @@ export class ConfirmarDepositoService {
 
 function normalizeCurrency(currency?: string): string {
   return (currency ?? 'BRL').trim().toUpperCase();
+}
+
+function mapPixTransaction(entry: PixTransaction): PixTransactionRecord {
+  return {
+    id: entry.id,
+    accountId: entry.accountId,
+    txType: entry.txType as PixTransactionType,
+    status: entry.status as PixTransactionStatus,
+    amountCents: entry.amountCents,
+    currency: entry.currency,
+    idempotencyKey: entry.idempotencyKey,
+    txid: entry.txid ?? null,
+    e2eId: entry.e2eId ?? null,
+    provider: entry.provider ?? null,
+    externalReference: entry.externalReference ?? null,
+    payload: entry.payload ?? null,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+    completedAt: entry.completedAt ?? null,
+  };
 }

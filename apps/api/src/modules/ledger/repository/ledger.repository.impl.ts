@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { LedgerStatementQuery } from '../dtos/ledger.dto';
+import { LedgerEntry, PrismaClient } from '@prisma/client';
+import { LedgerDirection, LedgerEntryType, LedgerStatementQuery } from '../dtos/ledger.dto';
 import {
   LedgerEntryCreateInput,
   LedgerEntryRecord,
@@ -16,7 +16,7 @@ export class LedgerRepositoryPrisma implements LedgerRepository {
   ): Promise<LedgerEntryRecord> {
     const client = tx ?? this.prisma;
 
-    return client.ledgerEntry.create({
+    const created = await client.ledgerEntry.create({
       data: {
         accountId: input.accountId,
         walletId: input.walletId ?? null,
@@ -30,6 +30,8 @@ export class LedgerRepositoryPrisma implements LedgerRepository {
         metadata: input.metadata ?? undefined,
       },
     });
+
+    return mapLedgerEntry(created);
   }
 
   async findStatement(
@@ -52,8 +54,25 @@ export class LedgerRepositoryPrisma implements LedgerRepository {
       client.ledgerEntry.count({ where }),
     ]);
 
-    return { items, total };
+    return { items: items.map(mapLedgerEntry), total };
   }
+}
+
+function mapLedgerEntry(entry: LedgerEntry): LedgerEntryRecord {
+  return {
+    id: entry.id,
+    accountId: entry.accountId,
+    walletId: entry.walletId ?? null,
+    entryType: entry.entryType as LedgerEntryType,
+    direction: entry.direction as LedgerDirection,
+    amountCents: entry.amountCents,
+    currency: entry.currency,
+    referenceType: entry.referenceType ?? null,
+    referenceId: entry.referenceId ?? null,
+    externalReference: entry.externalReference ?? null,
+    metadata: entry.metadata ?? null,
+    createdAt: entry.createdAt,
+  };
 }
 
 function buildWhere(accountId: string, query: LedgerStatementQuery) {

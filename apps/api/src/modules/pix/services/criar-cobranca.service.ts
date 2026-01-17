@@ -47,7 +47,7 @@ export class CriarCobrancaService {
         txid: charge.txid,
         provider: charge.provider,
         externalReference: charge.externalReference ?? null,
-        payload: charge.payload,
+        payload: charge.payload as Prisma.JsonValue,
       });
 
       recordPixDepositCreated();

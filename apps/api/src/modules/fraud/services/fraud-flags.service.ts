@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 export type FraudFlagInput = {
   accountId?: string | null;
   flagType: string;
   severity?: 'low' | 'medium' | 'high';
-  details?: Record<string, unknown> | null;
+  details?: Prisma.InputJsonValue | null;
 };
 
 export class FraudFlagsService {

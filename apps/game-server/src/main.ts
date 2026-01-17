@@ -1,7 +1,8 @@
 import http from 'http';
 import { URL } from 'url';
 import { randomUUID } from 'crypto';
-import WebSocket, { WebSocketServer } from 'ws';
+import type { IncomingMessage } from 'http';
+import WebSocket, { RawData, WebSocketServer } from 'ws';
 import { config } from './shared/config';
 import { logger } from './shared/observability/logger';
 import { ArenaManager } from './modules/realtime';
@@ -100,7 +101,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (socket, req) => {
+wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
   const connectionId = randomUUID();
   const playerId = randomUUID();
   connectionsTotal += 1;
@@ -126,7 +127,7 @@ wss.on('connection', (socket, req) => {
     context.lastPongAt = Date.now();
   });
 
-  socket.on('message', (data) => {
+  socket.on('message', (data: RawData) => {
     const message = parseMessage(data);
     if (!message) {
       sendError(socket, 'invalid_message', 'Mensagem invalida');
@@ -152,7 +153,7 @@ wss.on('connection', (socket, req) => {
     }
   });
 
-  socket.on('close', (code, reason) => {
+  socket.on('close', (code: number, reason: Buffer) => {
     const stats = arenaManager.getPlayerStats(playerId);
     const runId = context.runId;
     if (context.cashoutTimer) {
@@ -181,7 +182,7 @@ wss.on('connection', (socket, req) => {
     });
   });
 
-  socket.on('error', (error) => {
+  socket.on('error', (error: Error) => {
     logger.error('player_socket_error', {
       connection_id: connectionId,
       player_id: playerId,

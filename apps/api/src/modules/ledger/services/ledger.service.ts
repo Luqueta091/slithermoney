@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { ValidationError } from '../../../shared/errors/validation-error';
 import {
   LedgerDirection,
@@ -25,7 +26,7 @@ export class LedgerService {
       referenceType?: string | null;
       referenceId?: string | null;
       externalReference?: string | null;
-      metadata?: Record<string, unknown> | null;
+      metadata?: Prisma.JsonValue | null;
     },
     tx?: PrismaClientLike,
   ): Promise<LedgerEntryRecord> {

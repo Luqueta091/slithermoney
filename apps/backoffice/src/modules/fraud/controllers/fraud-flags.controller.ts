@@ -1,4 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../../shared/database/prisma';
 import { HttpError } from '../../../shared/http/http-error';
 import { requireBackofficeAuth } from '../../../shared/http/auth';
@@ -53,10 +54,39 @@ export async function handleResolveFraudFlag(req: IncomingMessage, res: ServerRe
     afterData: snapshotFlag(updated),
   });
 
-  sendJson(res, 200, snapshotFlag(updated));
+  sendJson(res, 200, snapshotFlagResponse(updated));
 }
 
 function snapshotFlag(flag: {
+  id: string;
+  accountId?: string | null;
+  flagType: string;
+  severity: string;
+  status: string;
+  details?: unknown | null;
+  createdAt: Date;
+  updatedAt: Date;
+  resolvedAt?: Date | null;
+}): Prisma.InputJsonValue {
+  const details =
+    flag.details && typeof flag.details === 'object' && !Array.isArray(flag.details)
+      ? (flag.details as Prisma.InputJsonValue)
+      : flag.details ?? null;
+
+  return {
+    id: flag.id,
+    account_id: flag.accountId ?? null,
+    flag_type: flag.flagType,
+    severity: flag.severity,
+    status: flag.status,
+    details,
+    created_at: flag.createdAt.toISOString(),
+    updated_at: flag.updatedAt.toISOString(),
+    resolved_at: flag.resolvedAt ? flag.resolvedAt.toISOString() : null,
+  };
+}
+
+function snapshotFlagResponse(flag: {
   id: string;
   accountId?: string | null;
   flagType: string;

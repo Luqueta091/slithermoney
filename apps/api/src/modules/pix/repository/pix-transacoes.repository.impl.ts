@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { PixTransaction, PrismaClient } from '@prisma/client';
+import { PixTransactionStatus, PixTransactionType } from '../dtos/criar-cobranca.dto';
 import {
   PixTransacoesRepository,
   PixTransactionCreateInput,
@@ -10,15 +11,19 @@ export class PixTransacoesRepositoryPrisma implements PixTransacoesRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findByIdempotencyKey(idempotencyKey: string): Promise<PixTransactionRecord | null> {
-    return this.prisma.pixTransaction.findUnique({
+    const record = await this.prisma.pixTransaction.findUnique({
       where: { idempotencyKey },
     });
+
+    return record ? mapPixTransaction(record) : null;
   }
 
   async findByTxid(txid: string): Promise<PixTransactionRecord | null> {
-    return this.prisma.pixTransaction.findUnique({
+    const record = await this.prisma.pixTransaction.findUnique({
       where: { txid },
     });
+
+    return record ? mapPixTransaction(record) : null;
   }
 
   async create(
@@ -33,7 +38,7 @@ export class PixTransacoesRepositoryPrisma implements PixTransacoesRepository {
       update: {},
     });
 
-    return client.pixTransaction.create({
+    const created = await client.pixTransaction.create({
       data: {
         accountId: input.accountId,
         txType: input.txType,
@@ -48,6 +53,8 @@ export class PixTransacoesRepositoryPrisma implements PixTransacoesRepository {
         payload: input.payload ?? undefined,
       },
     });
+
+    return mapPixTransaction(created);
   }
 
   async confirmDeposit(
@@ -71,8 +78,30 @@ export class PixTransacoesRepositoryPrisma implements PixTransacoesRepository {
       return null;
     }
 
-    return tx.pixTransaction.findUnique({
+    const record = await tx.pixTransaction.findUnique({
       where: { txid: input.txid },
     });
+
+    return record ? mapPixTransaction(record) : null;
   }
+}
+
+function mapPixTransaction(entry: PixTransaction): PixTransactionRecord {
+  return {
+    id: entry.id,
+    accountId: entry.accountId,
+    txType: entry.txType as PixTransactionType,
+    status: entry.status as PixTransactionStatus,
+    amountCents: entry.amountCents,
+    currency: entry.currency,
+    idempotencyKey: entry.idempotencyKey,
+    txid: entry.txid ?? null,
+    e2eId: entry.e2eId ?? null,
+    provider: entry.provider ?? null,
+    externalReference: entry.externalReference ?? null,
+    payload: entry.payload ?? null,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+    completedAt: entry.completedAt ?? null,
+  };
 }
