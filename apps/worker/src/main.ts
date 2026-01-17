@@ -58,6 +58,22 @@ server.listen(config.PORT, () => {
   });
 });
 
+server.on('error', (error) => {
+  if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+    logger.warn('metrics_server_port_in_use', {
+      port: config.PORT,
+      service: config.SERVICE_NAME,
+    });
+    return;
+  }
+
+  logger.error('metrics_server_error', {
+    port: config.PORT,
+    service: config.SERVICE_NAME,
+    error: error instanceof Error ? error.message : 'unknown_error',
+  });
+});
+
 const heartbeat = setInterval(() => {
   logger.debug('worker_heartbeat', {
     interval_ms: config.HEARTBEAT_MS,
