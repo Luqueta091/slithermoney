@@ -442,8 +442,8 @@ export class SlitherEngine {
   }
 
   private massToPoints(mass: number): number {
-    const base = 24;
-    const k = 1.9;
+    const base = 10;
+    const k = 1.6;
     return clamp(Math.floor(base + mass * k), base, this.maxSnakePoints);
   }
 
@@ -556,7 +556,7 @@ export class SlitherEngine {
     const [x, y] = this.randomPointInWorld();
     const angle = randf(0, Math.PI * 2);
     const points = new PointRing(this.maxSnakePoints);
-    const baseMass = 10;
+    const baseMass = 6;
     const basePoints = this.massToPoints(baseMass);
     for (let i = 0; i < basePoints; i += 1) {
       const t = (basePoints - 1 - i) * this.segmentDistance;
@@ -601,7 +601,7 @@ export class SlitherEngine {
     snake.y = y;
     snake.angle = angle;
     snake.targetAngle = angle;
-    snake.mass = 10;
+    snake.mass = 6;
     snake.boost = false;
     snake.alive = true;
     snake.deathReason = undefined;
