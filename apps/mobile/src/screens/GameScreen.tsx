@@ -5,6 +5,12 @@ import {
   type SnapshotPayload,
   type Vector2,
 } from '@slithermoney/contracts';
+import {
+  SlitherEngine,
+  type SlitherPelletEvent,
+  type SlitherSnapshotPlayer,
+} from '../../../game-server/src/modules/realtime/slither/engine';
+import { resolveMultiplier } from '../../../game-server/src/modules/realtime/multiplier';
 import { ActionButton } from '../components/ActionButton';
 import { RunResultOverlay } from '../components/RunResultOverlay';
 import { type RunStartResponse } from '../api/client';
@@ -45,10 +51,30 @@ type RunResultState = {
   finalLength: number | null;
 };
 
+type CashoutPayload = {
+  status?: string;
+  multiplier?: number | string;
+  payout?: number | string;
+  payout_cents?: number | string;
+  size_score?: number | string;
+  length?: number | string;
+  final_length?: number | string;
+};
+
+type EliminatedPayloadExtended = EliminatedPayload & {
+  multiplier?: number | string;
+  size_score?: number | string;
+  length?: number | string;
+  final_length?: number | string;
+};
+
 const PERF = {
   maxDpr: 1.5,
   leaderboardHz: 4,
 };
+
+const OFFLINE_MODE = true;
+const OFFLINE_BOT_COUNT = 20;
 
 export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -56,6 +82,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const socketRef = useRef<WebSocket | null>(null);
   const inputIntervalRef = useRef<number | null>(null);
   const animationRef = useRef<number | null>(null);
+  const offlineEngineRef = useRef<SlitherEngine | null>(null);
+  const offlineTickRef = useRef<number | null>(null);
+  const offlineTickCountRef = useRef(0);
   const playerIdRef = useRef<string | null>(null);
   const seqRef = useRef(1);
   const overlayOpenRef = useRef(false);
@@ -151,7 +180,11 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       return;
     }
 
-    connect(run);
+    if (OFFLINE_MODE) {
+      startOffline(run);
+    } else {
+      connect(run);
+    }
     startRenderLoop();
     const cleanupResize = setupResizeObserver();
     const cleanupInput = setupInputHandlers();
@@ -161,8 +194,12 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       cleanupResize();
       stopInputLoop();
       stopRenderLoop();
-      socketRef.current?.close();
-      socketRef.current = null;
+      if (OFFLINE_MODE) {
+        stopOffline();
+      } else {
+        socketRef.current?.close();
+        socketRef.current = null;
+      }
     };
   }, [run?.run_id]);
 
@@ -232,6 +269,53 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     };
   };
 
+  const startOffline = (data: RunStartResponse): void => {
+    setStatus('playing');
+    setError(null);
+    setEliminationReason(null);
+    setRunResult(null);
+    setOverlayOpen(false);
+    setCashoutPending(false);
+
+    const engine = new SlitherEngine();
+    engine.ensureBots(OFFLINE_BOT_COUNT);
+    const playerId = 'player-local';
+    engine.addPlayer(playerId, '#FFD166');
+    offlineEngineRef.current = engine;
+    offlineTickCountRef.current = 0;
+    playerIdRef.current = playerId;
+
+    const initialSnapshot = buildOfflineSnapshot(engine, offlineTickCountRef.current, true, true);
+    handleSnapshot(initialSnapshot);
+
+    const interval = window.setInterval(() => {
+      const dt = 1 / engine.tickRate;
+      const { eliminations } = engine.update(dt);
+      offlineTickCountRef.current += 1;
+      const snapshot = buildOfflineSnapshot(engine, offlineTickCountRef.current, false, false);
+      handleSnapshot(snapshot);
+
+      for (const elimination of eliminations) {
+        if (elimination.playerId === playerIdRef.current) {
+          applyElimination({
+            reason: elimination.reason,
+            size_score: Math.floor(elimination.mass),
+            multiplier: resolveMultiplier(Math.floor(elimination.mass)),
+          });
+        }
+      }
+    }, Math.round(1000 / engine.tickRate));
+    offlineTickRef.current = interval;
+  };
+
+  const stopOffline = (): void => {
+    if (offlineTickRef.current) {
+      window.clearInterval(offlineTickRef.current);
+      offlineTickRef.current = null;
+    }
+    offlineEngineRef.current = null;
+  };
+
   const handleMessage = (type: string, payload?: unknown): void => {
     switch (type) {
       case 'WELCOME': {
@@ -254,60 +338,12 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
         break;
       }
       case 'CASHOUT_RESULT': {
-        const data = payload as {
-          status?: string;
-          multiplier?: number | string;
-          payout?: number | string;
-          payout_cents?: number | string;
-          size_score?: number | string;
-          length?: number | string;
-          final_length?: number | string;
-        };
-        setCashoutHold(null);
-        setCashoutResult(data?.status ?? 'unknown');
-        const payloadMultiplier = resolveOptionalNumber(data?.multiplier);
-        const payloadPayout =
-          resolveOptionalNumber(data?.payout) ?? resolveOptionalNumber(data?.payout_cents);
-        const finalMultiplier =
-          payloadMultiplier ?? lastKnownMultiplierRef.current ?? null;
-        const computedPayout =
-          payloadPayout ??
-          (Number.isFinite(stakeCents) && finalMultiplier !== null
-            ? Math.floor(stakeCents * finalMultiplier)
-            : null);
-        setRunResult({
-          kind: 'cashout',
-          stake: Number.isFinite(stakeCents) ? stakeCents : null,
-          payout: computedPayout,
-          multiplier: finalMultiplier,
-          finalLength: resolveFinalLength(data, lastKnownLengthRef.current),
-        });
-        overlayOpenRef.current = true;
-        setOverlayOpen(true);
-        setStatus('ended');
-        setCashoutPending(false);
+        const data = payload as CashoutPayload;
+        applyCashoutResult(data);
         break;
       }
       case 'ELIMINATED': {
-        const data = payload as EliminatedPayload & {
-          size_score?: number | string;
-          length?: number | string;
-          final_length?: number | string;
-          multiplier?: number | string;
-        };
-        setEliminationReason(data?.reason ?? 'eliminated');
-        setStatus('ended');
-        setRunResult({
-          kind: 'eliminated',
-          stake: Number.isFinite(stakeCents) ? stakeCents : null,
-          payout: null,
-          multiplier:
-            resolveOptionalNumber(data?.multiplier) ?? lastKnownMultiplierRef.current ?? null,
-          finalLength: resolveFinalLength(data, lastKnownLengthRef.current),
-        });
-        overlayOpenRef.current = true;
-        setOverlayOpen(true);
-        setCashoutPending(false);
+        applyElimination(payload as EliminatedPayload);
         break;
       }
       case 'ERROR': {
@@ -318,6 +354,50 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       default:
         break;
     }
+  };
+
+  const applyCashoutResult = (data: CashoutPayload): void => {
+    setCashoutHold(null);
+    setCashoutResult(data?.status ?? 'unknown');
+    const payloadMultiplier = resolveOptionalNumber(data?.multiplier);
+    const payloadPayout =
+      resolveOptionalNumber(data?.payout) ?? resolveOptionalNumber(data?.payout_cents);
+    const finalMultiplier = payloadMultiplier ?? lastKnownMultiplierRef.current ?? null;
+    const computedPayout =
+      payloadPayout ??
+      (Number.isFinite(stakeCents) && finalMultiplier !== null
+        ? Math.floor(stakeCents * finalMultiplier)
+        : null);
+    setRunResult({
+      kind: 'cashout',
+      stake: Number.isFinite(stakeCents) ? stakeCents : null,
+      payout: computedPayout,
+      multiplier: finalMultiplier,
+      finalLength: resolveFinalLength(data, lastKnownLengthRef.current),
+    });
+    overlayOpenRef.current = true;
+    setOverlayOpen(true);
+    setStatus('ended');
+    setCashoutPending(false);
+  };
+
+  const applyElimination = (data: EliminatedPayload): void => {
+    const extended = data as EliminatedPayloadExtended;
+    setEliminationReason(data?.reason ?? 'eliminated');
+    setStatus('ended');
+    setRunResult({
+      kind: 'eliminated',
+      stake: Number.isFinite(stakeCents) ? stakeCents : null,
+      payout: null,
+      multiplier:
+        resolveOptionalNumber(extended?.multiplier) ??
+        lastKnownMultiplierRef.current ??
+        null,
+      finalLength: resolveFinalLength(extended, lastKnownLengthRef.current),
+    });
+    overlayOpenRef.current = true;
+    setOverlayOpen(true);
+    setCashoutPending(false);
   };
 
   const handleSnapshot = (snapshot: SnapshotPayload): void => {
@@ -439,6 +519,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   };
 
   const sendMessage = (type: string, payload?: Record<string, unknown>): void => {
+    if (OFFLINE_MODE) {
+      return;
+    }
     if (socketRef.current?.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -458,11 +541,21 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       if (Math.abs(delta) > 0.01 || boostChanged) {
         inputRef.current.lastSent.angle = angle;
         inputRef.current.lastSent.boost = inputRef.current.boost;
-        sendMessage('INPUT', {
-          seq: seqRef.current++,
-          direction,
-          boost: inputRef.current.boost,
-        });
+        if (OFFLINE_MODE) {
+          if (offlineEngineRef.current && playerIdRef.current) {
+            offlineEngineRef.current.handleInput(
+              playerIdRef.current,
+              direction,
+              inputRef.current.boost,
+            );
+          }
+        } else {
+          sendMessage('INPUT', {
+            seq: seqRef.current++,
+            direction,
+            boost: inputRef.current.boost,
+          });
+        }
       }
     }, interval);
   };
@@ -522,11 +615,18 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     inputRef.current.boost = true;
     inputRef.current.lastSent.angle = angle;
     inputRef.current.lastSent.boost = true;
-    sendMessage('INPUT', {
-      seq: seqRef.current++,
-      direction,
-      boost: true,
-    });
+    if (OFFLINE_MODE) {
+      if (offlineEngineRef.current && playerIdRef.current) {
+        offlineEngineRef.current.handleInput(playerIdRef.current, direction, true);
+      }
+      setCashoutHold(5000);
+    } else {
+      sendMessage('INPUT', {
+        seq: seqRef.current++,
+        direction,
+        boost: true,
+      });
+    }
     cashoutHoldRef.current.timerId = window.setTimeout(() => {
       finishCashoutHold();
     }, 5000);
@@ -554,12 +654,23 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       cashoutHoldRef.current.timerId = null;
     }
     inputRef.current.boost = false;
-    sendMessage('INPUT', {
-      seq: seqRef.current++,
-      direction: cashoutHoldRef.current.direction,
-      boost: false,
-    });
-    sendMessage('CASHOUT_REQUEST', { run_id: runIdRef.current });
+    if (OFFLINE_MODE) {
+      if (offlineEngineRef.current && playerIdRef.current) {
+        offlineEngineRef.current.handleInput(
+          playerIdRef.current,
+          cashoutHoldRef.current.direction,
+          false,
+        );
+      }
+      setCashoutHold(null);
+    } else {
+      sendMessage('INPUT', {
+        seq: seqRef.current++,
+        direction: cashoutHoldRef.current.direction,
+        boost: false,
+      });
+      sendMessage('CASHOUT_REQUEST', { run_id: runIdRef.current });
+    }
     const fallbackMultiplier = lastKnownMultiplierRef.current;
     const fallbackLength = lastKnownLengthRef.current;
     const computedPayout =
@@ -988,6 +1099,80 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       </div>
     </div>
   );
+}
+
+function buildOfflineSnapshot(
+  engine: SlitherEngine,
+  tick: number,
+  includePellets: boolean,
+  includeWorld: boolean,
+): SnapshotPayload {
+  const players = engine.getSnapshotPlayers().map((player) => mapOfflinePlayer(player));
+  const pelletEvents = mapOfflinePelletEvents(engine.flushPelletEvents());
+
+  const snapshot: SnapshotPayload = {
+    tick,
+    room_id: 'offline',
+    players,
+    pellet_events: pelletEvents,
+  };
+
+  if (includePellets) {
+    snapshot.pellets = engine.getActivePellets().map((pellet) => ({
+      id: pellet.id.toString(),
+      x: pellet.x,
+      y: pellet.y,
+      value: pellet.value,
+      radius: pellet.radius,
+      hue: pellet.hue,
+    }));
+  }
+
+  if (includeWorld) {
+    snapshot.world_radius = engine.worldRadius;
+  }
+
+  return snapshot;
+}
+
+function mapOfflinePlayer(player: SlitherSnapshotPlayer): SnapshotPayload['players'][number] {
+  const sizeScore = Math.floor(player.mass);
+  return {
+    id: player.id,
+    name: player.name,
+    x: player.x,
+    y: player.y,
+    boost: player.boost,
+    size_score: sizeScore,
+    multiplier: resolveMultiplier(sizeScore),
+    color: `hsl(${player.hue}, 90%, 58%)`,
+    segments: player.segments,
+    angle: player.angle,
+    radius: player.radius,
+    hue: player.hue,
+  };
+}
+
+function mapOfflinePelletEvents(events: SlitherPelletEvent[]): SnapshotPayload['pellet_events'] {
+  if (events.length === 0) {
+    return [];
+  }
+  return events.map((event) => {
+    if (event.type === 'delete') {
+      return { type: 'delete', id: event.id.toString() };
+    }
+    return {
+      type: 'spawn',
+      pellet: {
+        id: event.pellet.id.toString(),
+        x: event.pellet.x,
+        y: event.pellet.y,
+        value: event.pellet.value,
+        radius: event.pellet.radius,
+        hue: event.pellet.hue,
+      },
+    };
+  });
 }
 
 function drawWorldBorder(context: CanvasRenderingContext2D, radius: number): void {
