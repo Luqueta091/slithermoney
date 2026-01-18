@@ -539,7 +539,8 @@ export class SlitherEngine {
 
   private spawnDeathPellets(snake: SnakeState): void {
     const n = snake.points.size();
-    const step = Math.max(1, Math.floor(n / this.deathPelletTarget));
+    const effectiveTarget = Math.max(1, Math.floor(this.deathPelletTarget * 0.3));
+    const step = Math.max(1, Math.floor(n / effectiveTarget));
     for (let i = 0; i < n; i += step) {
       const [px, py] = snake.points.get(i);
       this.spawnPelletAt(px, py, 4.6, 2.2, snake.hue, true);
@@ -630,7 +631,7 @@ export class SlitherEngine {
       return;
     }
 
-    snake.ai.thinkAt = this.now + randInt(120, 260);
+    snake.ai.thinkAt = this.now + randInt(200, 360);
 
     const distanceFromCenter = Math.sqrt(snake.x * snake.x + snake.y * snake.y);
     if (distanceFromCenter > this.worldRadius * 0.82) {
@@ -644,14 +645,14 @@ export class SlitherEngine {
       const dx = target.x - snake.x;
       const dy = target.y - snake.y;
       const distance = Math.hypot(dx, dy);
-      const lead = clamp(distance * 0.35, 80, 260);
+      const lead = clamp(distance * 0.25, 60, 200);
       const tx = target.x + Math.cos(target.angle) * lead;
       const ty = target.y + Math.sin(target.angle) * lead;
-      snake.ai.desiredAngle = Math.atan2(ty - snake.y, tx - snake.x) + randf(-0.05, 0.05);
+      snake.ai.desiredAngle = Math.atan2(ty - snake.y, tx - snake.x) + randf(-0.08, 0.08);
       if (distance < 700 && snake.mass > 24) {
-        snake.boost = Math.random() < 0.6;
+        snake.boost = Math.random() < 0.35;
       } else if (snake.mass > 40) {
-        snake.boost = Math.random() < 0.15;
+        snake.boost = Math.random() < 0.08;
       } else {
         snake.boost = false;
       }
@@ -683,7 +684,7 @@ export class SlitherEngine {
 
     if (best) {
       snake.ai.desiredAngle = Math.atan2(best[1] - snake.y, best[0] - snake.x) + randf(-0.08, 0.08);
-      snake.boost = Math.random() < 0.08 && snake.mass > 35;
+      snake.boost = Math.random() < 0.05 && snake.mass > 35;
     } else {
       snake.ai.desiredAngle =
         snake.ai.desiredAngle + randf(-snake.ai.wiggle, snake.ai.wiggle) * 0.25;
