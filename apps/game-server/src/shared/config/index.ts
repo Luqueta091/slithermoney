@@ -26,7 +26,7 @@ const schema = z.object({
   API_BASE_URL: z.string().default('http://localhost:3000'),
   GAME_SERVER_WEBHOOK_KEY: z.string().optional().default(''),
   API_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-  CASHOUT_HOLD_MS: z.coerce.number().int().positive().default(1500),
+  CASHOUT_HOLD_MS: z.coerce.number().int().positive().default(3000),
 });
 
 export type GameServerConfig = z.infer<typeof schema>;
@@ -55,5 +55,5 @@ export const config: GameServerConfig = loadEnv(schema, {
   API_BASE_URL: 'http://localhost:3000',
   GAME_SERVER_WEBHOOK_KEY: '',
   API_REQUEST_TIMEOUT_MS: 5000,
-  CASHOUT_HOLD_MS: 1500,
+  CASHOUT_HOLD_MS: 3000,
 });

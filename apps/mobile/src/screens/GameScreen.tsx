@@ -77,6 +77,7 @@ const OFFLINE_MODE = true;
 const OFFLINE_BOT_COUNT = 20;
 const OFFLINE_TICK_RATE = 60;
 const OFFLINE_INPUT_HZ = 60;
+const CASHOUT_HOLD_MS = 3000;
 
 export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -106,7 +107,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     angle: 0,
     direction: { x: 1, y: 0 },
     prevBoost: false,
+    startedAt: 0,
   });
+  const cashoutCountdownRef = useRef<number | null>(null);
 
   const gridPatternRef = useRef<CanvasPattern | null>(null);
   const pelletSpritesRef = useRef<HTMLCanvasElement[]>([]);
@@ -201,6 +204,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       cleanupResize();
       stopInputLoop();
       stopRenderLoop();
+      stopCashoutCountdown();
       if (OFFLINE_MODE) {
         stopOffline();
       } else {
@@ -340,7 +344,10 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       case 'CASHOUT_HOLD': {
         const data = payload as { hold_ms?: number };
         if (data?.hold_ms) {
+          cashoutHoldRef.current.active = true;
+          cashoutHoldRef.current.startedAt = performance.now();
           setCashoutHold(data.hold_ms);
+          startCashoutCountdown();
           setCashoutResult(null);
         }
         break;
@@ -621,6 +628,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     cashoutHoldRef.current.prevBoost = inputRef.current.boost;
     cashoutHoldRef.current.angle = angle;
     cashoutHoldRef.current.direction = direction;
+    cashoutHoldRef.current.startedAt = performance.now();
     inputRef.current.boost = true;
     inputRef.current.lastSent.angle = angle;
     inputRef.current.lastSent.boost = true;
@@ -628,7 +636,8 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       if (offlineEngineRef.current && playerIdRef.current) {
         offlineEngineRef.current.handleInput(playerIdRef.current, direction, true);
       }
-      setCashoutHold(5000);
+      setCashoutHold(CASHOUT_HOLD_MS);
+      startCashoutCountdown();
     } else {
       sendMessage('INPUT', {
         seq: seqRef.current++,
@@ -638,7 +647,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     }
     cashoutHoldRef.current.timerId = window.setTimeout(() => {
       finishCashoutHold();
-    }, 5000);
+    }, CASHOUT_HOLD_MS);
   };
 
   const cancelCashoutHold = (): void => {
@@ -646,11 +655,14 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       return;
     }
     cashoutHoldRef.current.active = false;
+    cashoutHoldRef.current.startedAt = 0;
     if (cashoutHoldRef.current.timerId) {
       window.clearTimeout(cashoutHoldRef.current.timerId);
       cashoutHoldRef.current.timerId = null;
     }
     inputRef.current.boost = cashoutHoldRef.current.prevBoost;
+    setCashoutHold(null);
+    stopCashoutCountdown();
   };
 
   const finishCashoutHold = (): void => {
@@ -658,6 +670,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       return;
     }
     cashoutHoldRef.current.active = false;
+    cashoutHoldRef.current.startedAt = 0;
     if (cashoutHoldRef.current.timerId) {
       window.clearTimeout(cashoutHoldRef.current.timerId);
       cashoutHoldRef.current.timerId = null;
@@ -672,6 +685,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
         );
       }
       setCashoutHold(null);
+      stopCashoutCountdown();
     } else {
       sendMessage('INPUT', {
         seq: seqRef.current++,
@@ -697,6 +711,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     setOverlayOpen(true);
     setStatus('ended');
     setCashoutPending(true);
+    stopCashoutCountdown();
   };
 
   const inputFromPointer = (): { angle: number; direction: Vector2 } => {
@@ -844,6 +859,26 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     drawSnakes(context, state, view, me?.id);
   };
 
+  const startCashoutCountdown = (): void => {
+    stopCashoutCountdown();
+    cashoutCountdownRef.current = window.setInterval(() => {
+      if (!cashoutHoldRef.current.active || !cashoutHoldRef.current.startedAt) {
+        stopCashoutCountdown();
+        return;
+      }
+      const elapsed = performance.now() - cashoutHoldRef.current.startedAt;
+      const remaining = Math.max(0, CASHOUT_HOLD_MS - elapsed);
+      setCashoutHold(Math.ceil(remaining));
+    }, 50);
+  };
+
+  const stopCashoutCountdown = (): void => {
+    if (cashoutCountdownRef.current) {
+      window.clearInterval(cashoutCountdownRef.current);
+      cashoutCountdownRef.current = null;
+    }
+  };
+
   const setupInputHandlers = (): (() => void) => {
     const handlePointerMove = (event: PointerEvent) => {
       if (overlayOpenRef.current) {
@@ -972,8 +1007,10 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
           </div>
           {cashoutHold ? (
             <div className="game-panel">
-              <div className="game-panel__title">Cashout hold</div>
-              <div className="game-panel__value">{cashoutHold}ms</div>
+              <div className="game-panel__title">Cashout</div>
+              <div className="game-panel__value">
+                {(cashoutHold / 1000).toFixed(1)}s
+              </div>
             </div>
           ) : null}
           {cashoutResult ? (
