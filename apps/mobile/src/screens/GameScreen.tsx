@@ -807,7 +807,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     const me = playerIdRef.current ? state.snakes.get(playerIdRef.current) : undefined;
 
     if (me) {
-      const camLerp = me.b ? 0.18 : 0.26;
+      const camLerp = me.b ? 0.22 : 0.38;
       view.camX += (me.x - view.camX) * camLerp;
       view.camY += (me.y - view.camY) * camLerp;
       const dyn = clamp(1 / (1 + me.m / 260), 0.35, 1.0);
