@@ -75,6 +75,8 @@ const PERF = {
 
 const OFFLINE_MODE = true;
 const OFFLINE_BOT_COUNT = 20;
+const OFFLINE_TICK_RATE = 60;
+const OFFLINE_INPUT_HZ = 60;
 
 export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -277,7 +279,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     setOverlayOpen(false);
     setCashoutPending(false);
 
-    const engine = new SlitherEngine();
+    const engine = new SlitherEngine({ tickRate: OFFLINE_TICK_RATE });
     engine.ensureBots(OFFLINE_BOT_COUNT);
     const playerId = 'player-local';
     engine.addPlayer(playerId, '#FFD166');
@@ -531,7 +533,8 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
 
   const startInputLoop = (): void => {
     stopInputLoop();
-    const interval = Math.round(1000 / 30);
+    const targetHz = OFFLINE_MODE ? OFFLINE_INPUT_HZ : 30;
+    const interval = Math.round(1000 / targetHz);
     inputIntervalRef.current = window.setInterval(() => {
       if (overlayOpenRef.current) {
         return;
