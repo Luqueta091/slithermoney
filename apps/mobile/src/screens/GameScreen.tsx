@@ -287,6 +287,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
 
     const initialSnapshot = buildOfflineSnapshot(engine, offlineTickCountRef.current, true, true);
     handleSnapshot(initialSnapshot);
+    startInputLoop();
 
     const interval = window.setInterval(() => {
       const dt = 1 / engine.tickRate;
