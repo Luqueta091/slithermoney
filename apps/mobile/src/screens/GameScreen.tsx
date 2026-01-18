@@ -78,6 +78,7 @@ const OFFLINE_BOT_COUNT = 20;
 const OFFLINE_TICK_RATE = 60;
 const OFFLINE_INPUT_HZ = 60;
 const CASHOUT_HOLD_MS = 3000;
+const CASHOUT_FEE_BPS = 1000;
 
 export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -152,7 +153,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const [isMobile, setIsMobile] = useState(false);
   const [cashoutPending, setCashoutPending] = useState(false);
   const stakeCents = run ? Number.parseInt(run.stake_cents, 10) : 0;
-  const payoutCents = Math.max(0, Math.floor(stakeCents * stats.multiplier));
+  const payoutCents = Math.max(0, computePayoutCents(stakeCents, stats.multiplier));
   const statusRef = useRef(status);
   const runIdRef = useRef<string | null>(run?.run_id ?? null);
   const stakeCentsRef = useRef(stakeCents);
@@ -381,7 +382,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     const computedPayout =
       payloadPayout ??
       (Number.isFinite(stakeCents) && finalMultiplier !== null
-        ? Math.floor(stakeCents * finalMultiplier)
+        ? computePayoutCents(stakeCents, finalMultiplier)
         : null);
     setRunResult({
       kind: 'cashout',
@@ -698,7 +699,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     const fallbackLength = lastKnownLengthRef.current;
     const computedPayout =
       Number.isFinite(stakeCentsRef.current) && fallbackMultiplier !== null
-        ? Math.floor(stakeCentsRef.current * fallbackMultiplier)
+        ? computePayoutCents(stakeCentsRef.current, fallbackMultiplier)
         : null;
     setRunResult({
       kind: 'cashout',
@@ -1474,4 +1475,13 @@ function resolveFinalLength(
     return direct;
   }
   return fallback;
+}
+
+function computePayoutCents(stakeCents: number, multiplier: number): number {
+  if (!Number.isFinite(stakeCents) || !Number.isFinite(multiplier)) {
+    return 0;
+  }
+  const gross = Math.floor(stakeCents * multiplier);
+  const fee = Math.floor((gross * CASHOUT_FEE_BPS) / 10000);
+  return Math.max(0, gross - fee);
 }
