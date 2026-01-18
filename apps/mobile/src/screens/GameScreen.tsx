@@ -789,8 +789,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     const me = playerIdRef.current ? state.snakes.get(playerIdRef.current) : undefined;
 
     if (me) {
-      view.camX += (me.x - view.camX) * 0.15;
-      view.camY += (me.y - view.camY) * 0.15;
+      const camLerp = me.b ? 0.18 : 0.26;
+      view.camX += (me.x - view.camX) * camLerp;
+      view.camY += (me.y - view.camY) * camLerp;
       const dyn = clamp(1 / (1 + me.m / 260), 0.35, 1.0);
       view.scale = dyn * inputRef.current.zoom;
     } else {
