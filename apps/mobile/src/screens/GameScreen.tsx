@@ -84,6 +84,11 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const socketRef = useRef<WebSocket | null>(null);
   const inputIntervalRef = useRef<number | null>(null);
   const animationRef = useRef<number | null>(null);
+  const frameRef = useRef({
+    last: 0,
+    acc: 0,
+    step: 1000 / 60,
+  });
   const offlineEngineRef = useRef<SlitherEngine | null>(null);
   const offlineTickRef = useRef<number | null>(null);
   const offlineTickCountRef = useRef(0);
@@ -762,6 +767,19 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
 
   const startRenderLoop = (): void => {
     const render = (time: number) => {
+      const frame = frameRef.current;
+      if (!frame.last) {
+        frame.last = time;
+      }
+      let dt = time - frame.last;
+      if (dt > 100) {
+        dt = 100;
+      }
+      frame.last = time;
+      frame.acc += dt;
+      while (frame.acc >= frame.step) {
+        frame.acc -= frame.step;
+      }
       draw(time);
       animationRef.current = requestAnimationFrame(render);
     };
