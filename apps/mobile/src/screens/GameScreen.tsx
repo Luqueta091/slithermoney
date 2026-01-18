@@ -710,7 +710,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     overlayOpenRef.current = true;
     setOverlayOpen(true);
     setStatus('ended');
-    setCashoutPending(true);
+    setCashoutPending(!OFFLINE_MODE);
     stopCashoutCountdown();
   };
 
