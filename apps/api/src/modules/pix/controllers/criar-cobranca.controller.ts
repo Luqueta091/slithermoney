@@ -72,6 +72,8 @@ function buildGateway() {
     return new PixGatewayBspay({
       baseUrl: config.BSPAY_BASE_URL,
       token: config.BSPAY_TOKEN,
+      clientId: config.BSPAY_CLIENT_ID,
+      clientSecret: config.BSPAY_CLIENT_SECRET,
       postbackUrl: config.BSPAY_POSTBACK_URL,
       payerName: config.BSPAY_PAYER_NAME,
     });

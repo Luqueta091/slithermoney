@@ -4,47 +4,89 @@ import { PixChargeInput, PixChargeResult, PixGateway } from './pix.gateway';
 type BspayConfig = {
   baseUrl: string;
   token: string;
+  clientId?: string;
+  clientSecret?: string;
   postbackUrl: string;
   payerName: string;
 };
 
 export class PixGatewayBspay implements PixGateway {
+  private cachedToken: { value: string; expiresAt: number } | null = null;
+
   constructor(private readonly config: BspayConfig) {}
 
   async createCharge(input: PixChargeInput): Promise<PixChargeResult> {
-    const { baseUrl, token, postbackUrl, payerName } = this.config;
+    const { baseUrl, postbackUrl, payerName } = this.config;
+    const token = await this.getAccessToken();
     if (!token) {
-      throw new Error('BSPAY_TOKEN not configured');
+      throw new Error('BSPAY token not configured');
     }
     if (!postbackUrl) {
       throw new Error('BSPAY_POSTBACK_URL not configured');
     }
 
     const amount = Number((input.amountCents / 100).toFixed(2));
-    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/v2/pix/qrcode`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${token}`,
+    const response = await this.requestCharge(baseUrl, token, {
+      amount,
+      external_id: input.idempotencyKey,
+      payerQuestion: 'Deposito SlitherMoney',
+      postbackUrl,
+      payer: {
+        name: payerName,
+        document: '',
+        email: '',
       },
-      body: JSON.stringify({
-        amount,
-        external_id: input.idempotencyKey,
-        payerQuestion: 'Deposito SlitherMoney',
-        postbackUrl,
-        payer: {
-          name: payerName,
-          document: '',
-          email: '',
-        },
-      }),
     });
+
+    if (response.status === 401) {
+      const refreshed = await this.refreshAccessToken();
+      if (refreshed) {
+        const retry = await this.requestCharge(baseUrl, refreshed, {
+          amount,
+          external_id: input.idempotencyKey,
+          payerQuestion: 'Deposito SlitherMoney',
+          postbackUrl,
+          payer: {
+            name: payerName,
+            document: '',
+            email: '',
+          },
+        });
+        if (retry.ok) {
+          return this.parseChargeResponse(retry, input);
+        }
+        const body = await safeReadBody(retry);
+        throw new Error(`BSPAY charge failed: ${retry.status} ${body}`);
+      }
+    }
 
     if (!response.ok) {
       const body = await safeReadBody(response);
       throw new Error(`BSPAY charge failed: ${response.status} ${body}`);
     }
 
+    return this.parseChargeResponse(response, input);
+  }
+
+  private async requestCharge(
+    baseUrl: string,
+    token: string,
+    payload: Record<string, unknown>,
+  ): Promise<Response> {
+    return fetch(`${baseUrl.replace(/\/$/, '')}/v2/pix/qrcode`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  private async parseChargeResponse(
+    response: Response,
+    input: PixChargeInput,
+  ): Promise<PixChargeResult> {
     const payload = (await response.json()) as Record<string, unknown>;
     const txid = pickFirst(payload, [
       'transactionId',
@@ -101,7 +143,45 @@ export class PixGatewayBspay implements PixGateway {
       externalReference:
         (pickFirst(payload, ['external_id', 'externalId']) as string | undefined) ??
         input.idempotencyKey,
+      };
+  }
+
+  private async getAccessToken(): Promise<string> {
+    if (this.config.token) {
+      return this.config.token;
+    }
+    if (this.cachedToken && this.cachedToken.expiresAt > Date.now()) {
+      return this.cachedToken.value;
+    }
+    return (await this.refreshAccessToken()) ?? '';
+  }
+
+  private async refreshAccessToken(): Promise<string | null> {
+    const { baseUrl, clientId, clientSecret } = this.config;
+    if (!clientId || !clientSecret) {
+      return null;
+    }
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/v2/oauth/token`, {
+      method: 'POST',
+      headers: {
+        authorization: `Basic ${credentials}`,
+      },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const payload = (await response.json()) as {
+      access_token?: string;
+      expires_in?: number;
     };
+    if (!payload?.access_token) {
+      return null;
+    }
+    const ttlSeconds = typeof payload.expires_in === 'number' ? payload.expires_in : 0;
+    const expiresAt = Date.now() + Math.max(0, ttlSeconds - 30) * 1000;
+    this.cachedToken = { value: payload.access_token, expiresAt };
+    return payload.access_token;
   }
 }
 
