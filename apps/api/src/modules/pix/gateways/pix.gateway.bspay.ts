@@ -60,23 +60,25 @@ export class PixGatewayBspay implements PixGateway {
 
     const qrCode = pickFirst(payload, [
       'qr_code',
-      'qrcode',
       'qrCode',
       'payload.qr_code',
-      'payload.qrcode',
       'payload.qrCode',
     ]);
     const copyAndPaste = pickFirst(payload, [
+      'qrcode',
       'copy_and_paste',
       'copyAndPaste',
       'brcode',
       'brCode',
+      'payload.qrcode',
       'payload.copy_and_paste',
       'payload.copyAndPaste',
       'payload.brcode',
       'payload.brCode',
     ]);
     const expiresAt = pickFirst(payload, [
+      'calendar.dueDate',
+      'calendar.expiration',
       'expires_at',
       'expiresAt',
       'payload.expires_at',
@@ -88,7 +90,7 @@ export class PixGatewayBspay implements PixGateway {
         ? {
             qr_code: String(qrCode ?? ''),
             copy_and_paste: String(copyAndPaste ?? ''),
-            expires_at: String(expiresAt ?? ''),
+            expires_at: resolveExpiresAt(expiresAt),
           }
         : (payload as Record<string, unknown>);
 
@@ -101,6 +103,17 @@ export class PixGatewayBspay implements PixGateway {
         input.idempotencyKey,
     };
   }
+}
+
+function resolveExpiresAt(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const expiresAt = new Date(Date.now() + value * 1000);
+    return expiresAt.toISOString();
+  }
+  return String(value);
 }
 
 async function safeReadBody(response: Response): Promise<string> {
