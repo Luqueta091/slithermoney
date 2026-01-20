@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionButton } from '../components/ActionButton';
-import { type PixDepositResponse, confirmDeposit, createDeposit, listPixTransactions } from '../api/client';
+import { type PixDepositResponse, createDeposit, listPixTransactions } from '../api/client';
 import { formatCents, formatDate } from '../utils/format';
 
 const POLL_INTERVAL_MS = 5000;
@@ -85,15 +85,7 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
     await navigator.clipboard.writeText(text);
   };
 
-  const handleSimulate = async (): Promise<void> => {
-    if (!transaction?.txid) {
-      return;
-    }
-
-    const cents = Number.parseInt(transaction.amount_cents, 10);
-    await confirmDeposit(transaction.txid, cents);
-    await refreshStatus(transaction.txid);
-  };
+  const qrSrc = resolveQrImageSrc(transaction?.payload?.qr_code);
 
   return (
     <div className="card">
@@ -122,6 +114,12 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
 
       {transaction ? (
         <div className="card" style={{ gap: '10px' }}>
+          {qrSrc ? (
+            <div className="pix-qr">
+              <div className="card__label">QRCode</div>
+              <img src={qrSrc} alt="QRCode Pix" className="pix-qr__image" />
+            </div>
+          ) : null}
           <div>
             <div className="card__label">Status</div>
             <div className="card__value">{status ?? transaction.status}</div>
@@ -142,7 +140,6 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
           <div className="actions">
             <ActionButton label="Copiar codigo" onClick={handleCopy} variant="ghost" />
             <ActionButton label="Atualizar status" onClick={() => transaction.txid && refreshStatus(transaction.txid)} />
-            <ActionButton label="Simular confirmacao" onClick={handleSimulate} variant="ghost" />
           </div>
         </div>
       ) : null}
@@ -166,4 +163,25 @@ function resolveError(error: unknown): string {
   }
 
   return 'Falha ao gerar deposito';
+}
+
+function resolveQrImageSrc(value?: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith('data:image')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  const base64Like = /^[A-Za-z0-9+/=]+$/.test(trimmed);
+  if (base64Like && trimmed.length > 200) {
+    return `data:image/png;base64,${trimmed}`;
+  }
+  return null;
 }

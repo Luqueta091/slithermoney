@@ -249,17 +249,6 @@ export async function createDeposit(
   );
 }
 
-export async function confirmDeposit(txid: string, amountCents: number): Promise<void> {
-  await apiRequest(
-    '/pix/webhook',
-    {
-      method: 'POST',
-      body: JSON.stringify({ txid, amountCents, currency: 'BRL' }),
-    },
-    undefined,
-  );
-}
-
 export async function listPixTransactions(
   accountId: string,
   query: { txid?: string; id?: string } = {},

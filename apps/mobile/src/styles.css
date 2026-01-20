@@ -161,6 +161,21 @@ input {
   gap: 12px;
 }
 
+.pix-qr {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.pix-qr__image {
+  width: min(240px, 70vw);
+  height: auto;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
 .tabs {
   display: flex;
   flex-wrap: wrap;
