@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { ActionButton } from '../components/ActionButton';
 import { type PixDepositResponse, createDeposit, listPixTransactions } from '../api/client';
 import { formatCents, formatDate } from '../utils/format';
@@ -16,11 +17,43 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [qrImage, setQrImage] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => stopPolling();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadQr = async () => {
+      const qrCode = transaction?.payload?.qr_code ?? null;
+      const resolved = resolveQrImageSrc(qrCode);
+      if (resolved) {
+        setQrImage(resolved);
+        return;
+      }
+      const copy = transaction?.payload?.copy_and_paste ?? null;
+      if (!copy) {
+        setQrImage(null);
+        return;
+      }
+      try {
+        const dataUrl = await QRCode.toDataURL(copy, { margin: 1, width: 280 });
+        if (!cancelled) {
+          setQrImage(dataUrl);
+        }
+      } catch {
+        if (!cancelled) {
+          setQrImage(null);
+        }
+      }
+    };
+    void loadQr();
+    return () => {
+      cancelled = true;
+    };
+  }, [transaction?.payload?.qr_code, transaction?.payload?.copy_and_paste]);
 
   const stopPolling = (): void => {
     if (pollRef.current) {
@@ -85,7 +118,7 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
     await navigator.clipboard.writeText(text);
   };
 
-  const qrSrc = resolveQrImageSrc(transaction?.payload?.qr_code);
+  const qrSrc = qrImage ?? resolveQrImageSrc(transaction?.payload?.qr_code);
 
   return (
     <div className="card">
