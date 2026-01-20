@@ -8,6 +8,7 @@ type BspayConfig = {
   clientSecret?: string;
   postbackUrl: string;
   payerName: string;
+  qrExpirationSeconds?: number;
 };
 
 export class PixGatewayBspay implements PixGateway {
@@ -16,7 +17,7 @@ export class PixGatewayBspay implements PixGateway {
   constructor(private readonly config: BspayConfig) {}
 
   async createCharge(input: PixChargeInput): Promise<PixChargeResult> {
-    const { baseUrl, postbackUrl, payerName } = this.config;
+    const { baseUrl, postbackUrl, payerName, qrExpirationSeconds } = this.config;
     const token = await this.getAccessToken();
     if (!token) {
       throw new Error('BSPAY token not configured');
@@ -31,6 +32,7 @@ export class PixGatewayBspay implements PixGateway {
       external_id: input.idempotencyKey,
       payerQuestion: 'Deposito SlitherMoney',
       postbackUrl,
+      expiration: qrExpirationSeconds,
       payer: {
         name: payerName,
         document: '',
@@ -46,6 +48,7 @@ export class PixGatewayBspay implements PixGateway {
           external_id: input.idempotencyKey,
           payerQuestion: 'Deposito SlitherMoney',
           postbackUrl,
+          expiration: qrExpirationSeconds,
           payer: {
             name: payerName,
             document: '',

@@ -79,6 +79,7 @@ function buildGateway() {
       clientSecret: config.BSPAY_CLIENT_SECRET,
       postbackUrl: config.BSPAY_POSTBACK_URL,
       payerName: config.BSPAY_PAYER_NAME,
+      qrExpirationSeconds: config.BSPAY_QR_EXPIRATION_SECONDS,
     });
   }
 
