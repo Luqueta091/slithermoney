@@ -67,7 +67,8 @@ function mapDeposit(
 }
 
 function buildGateway() {
-  if (config.PIX_PROVIDER === 'bspay') {
+  const hasBspayCreds = Boolean(config.BSPAY_TOKEN && config.BSPAY_POSTBACK_URL);
+  if (config.PIX_PROVIDER === 'bspay' || hasBspayCreds) {
     return new PixGatewayBspay({
       baseUrl: config.BSPAY_BASE_URL,
       token: config.BSPAY_TOKEN,
