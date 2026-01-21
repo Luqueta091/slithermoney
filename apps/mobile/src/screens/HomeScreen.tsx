@@ -47,6 +47,7 @@ export function HomeScreen(): JSX.Element {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
+  const [identityPrompted, setIdentityPrompted] = useState(false);
 
   useEffect(() => {
     void loadInitialData();
@@ -100,12 +101,14 @@ export function HomeScreen(): JSX.Element {
   useEffect(() => {
     if (signedIn) {
       setAuthOpen(false);
+      setIdentityPrompted(false);
     }
-    if (needsIdentity) {
+    if (needsIdentity && !identityPrompted) {
       setAuthOpen(true);
       setAuthMode('signup');
+      setIdentityPrompted(true);
     }
-  }, [signedIn, needsIdentity]);
+  }, [signedIn, needsIdentity, identityPrompted]);
 
   const loadInitialData = async (): Promise<void> => {
     try {
@@ -220,7 +223,7 @@ export function HomeScreen(): JSX.Element {
     return (
       <div className="auth-overlay">
         <div className="auth-card">
-          {authMode === 'signup' || needsIdentity ? (
+          {authMode === 'signup' ? (
             <IdentityScreen
               accountId={accountId}
               fullName={fullName}
@@ -312,7 +315,7 @@ export function HomeScreen(): JSX.Element {
                   }}
                   variant="ghost"
                 />
-                <ActionButton label="Fechar" onClick={() => setAuthOpen(false)} variant="ghost" />
+                <ActionButton label="Voltar" onClick={() => setAuthOpen(false)} variant="ghost" />
               </div>
             </>
           )}
@@ -501,7 +504,7 @@ export function HomeScreen(): JSX.Element {
       return true;
     }
     setAuthOpen(true);
-    setAuthMode('login');
+    setAuthMode(needsIdentity ? 'signup' : 'login');
     if (nextTab) {
       setTab('lobby');
     }
