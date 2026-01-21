@@ -1,15 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap');
 
 :root {
   color-scheme: dark;
-  --night: #0b1014;
-  --deep-sea: #0f1f2d;
-  --sand: #f5efe6;
-  --clay: #cbbba0;
-  --coral: #ff6b4a;
-  --mint: #2ec4b6;
-  --ember: #f4a261;
-  --ink: #131a22;
+  --night: #0a0e12;
+  --deep-sea: #141b22;
+  --sand: #e8edf2;
+  --clay: #8ea0b3;
+  --coral: #59d388;
+  --mint: #74e0a8;
+  --ember: #6f7f91;
+  --ink: #0e1319;
+  --glow: #67d98a;
   --radius-md: 16px;
   --radius-lg: 22px;
   --space-sm: 10px;
@@ -24,9 +25,8 @@
 
 body {
   margin: 0;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  background: #161c22;
-  /* Updated to match Slither theme */
+  font-family: 'Fredoka', system-ui, sans-serif;
+  background: radial-gradient(circle at 20% 20%, #1d2630 0%, #141b22 35%, #0b0f14 100%);
   color: var(--sand);
   min-height: 100vh;
 }
@@ -53,7 +53,7 @@ input {
 .background {
   position: absolute;
   inset: 0;
-  background: #161c22;
+  background: radial-gradient(circle at 20% 20%, #1d2630 0%, #141b22 35%, #0b0f14 100%);
 }
 
 .blob {
@@ -61,18 +61,18 @@ input {
   width: 320px;
   height: 320px;
   border-radius: 50%;
-  opacity: 0.12;
+  opacity: 0.08;
   filter: blur(1px);
 }
 
 .blob.top {
-  background: var(--coral);
+  background: #2d3a4a;
   top: -140px;
   right: -120px;
 }
 
 .blob.bottom {
-  background: var(--mint);
+  background: #1f2a35;
   bottom: -180px;
   left: -160px;
 }
@@ -83,8 +83,8 @@ input {
   left: -90px;
   width: 360px;
   height: 42px;
-  background: var(--ember);
-  opacity: 0.15;
+  background: #1c2632;
+  opacity: 0.22;
   border-radius: 40px;
   transform: rotate(-12deg);
 }
@@ -116,7 +116,7 @@ input {
   text-transform: uppercase;
   letter-spacing: 2px;
   font-size: 12px;
-  color: var(--mint);
+  color: var(--clay);
 }
 
 .title {
@@ -133,8 +133,8 @@ input {
 }
 
 .card {
-  background: rgba(19, 26, 34, 0.72);
-  border: 1px solid rgba(203, 187, 160, 0.4);
+  background: rgba(9, 14, 19, 0.72);
+  border: 1px solid rgba(88, 107, 125, 0.3);
   border-radius: var(--radius-lg);
   padding: 20px;
   display: flex;
@@ -146,7 +146,7 @@ input {
   text-transform: uppercase;
   font-size: 12px;
   letter-spacing: 1.5px;
-  color: var(--mint);
+  color: var(--clay);
 }
 
 .card__value {
@@ -184,7 +184,7 @@ input {
 
 .tab {
   border-radius: 999px;
-  border: 1px solid rgba(203, 187, 160, 0.4);
+  border: 1px solid rgba(88, 107, 125, 0.5);
   background: transparent;
   color: var(--clay);
   padding: 8px 14px;
@@ -193,8 +193,8 @@ input {
 }
 
 .tab.active {
-  border-color: var(--mint);
-  color: var(--mint);
+  border-color: var(--glow);
+  color: var(--glow);
 }
 
 .button {
@@ -207,14 +207,14 @@ input {
 }
 
 .button.primary {
-  background: var(--coral);
-  color: var(--night);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(180deg, #7ee3a6 0%, #47c77b 100%);
+  color: #0a1410;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
 }
 
 .button.ghost {
-  background: transparent;
-  border: 1px solid var(--clay);
+  background: rgba(9, 14, 19, 0.4);
+  border: 1px solid rgba(88, 107, 125, 0.6);
   color: var(--sand);
 }
 
@@ -231,13 +231,13 @@ input {
 
 .form-label {
   font-size: 13px;
-  color: var(--sand);
+  color: var(--clay);
 }
 
 .form-input {
   border-radius: var(--radius-md);
-  border: 1px solid rgba(203, 187, 160, 0.4);
-  background: rgba(19, 26, 34, 0.65);
+  border: 1px solid rgba(88, 107, 125, 0.5);
+  background: rgba(10, 14, 18, 0.8);
   padding: 12px 14px;
   color: var(--sand);
   font-size: 14px;
@@ -256,7 +256,7 @@ input {
 
 .chip {
   border-radius: 999px;
-  border: 1px solid rgba(203, 187, 160, 0.4);
+  border: 1px solid rgba(88, 107, 125, 0.5);
   background: transparent;
   color: var(--clay);
   padding: 6px 12px;
@@ -265,8 +265,8 @@ input {
 }
 
 .chip.active {
-  border-color: var(--mint);
-  color: var(--mint);
+  border-color: var(--glow);
+  color: var(--glow);
 }
 
 .checkbox-row {
@@ -791,21 +791,18 @@ body.game-playing #root {
   letter-spacing: -2px;
   margin: 0 0 20px;
   text-align: center;
-  /* Slither.io logo is usually green/purple outline */
-  color: #4ade80;
+  color: #76e4a5;
   text-shadow:
-    3px 3px 0px #2e1a47,
-    -1px -1px 0 #2e1a47,
-    1px -1px 0 #2e1a47,
-    -1px 1px 0 #2e1a47,
-    1px 1px 0 #2e1a47;
-  font-family: "Arial Black", Gadget, sans-serif;
-  /* Chunky font */
+    2px 2px 0px #1a232d,
+    -1px -1px 0 #1a232d,
+    1px -1px 0 #1a232d,
+    -1px 1px 0 #1a232d,
+    1px 1px 0 #1a232d;
+  font-family: "Fredoka", system-ui, sans-serif;
 }
 
 .slither-logo span {
-  color: #a78bfa;
-  /* Purple part similar to .io */
+  color: #9aa7ff;
 }
 
 .slither-input-wrapper {
@@ -815,14 +812,12 @@ body.game-playing #root {
 
 .slither-input {
   width: 100%;
-  background: #4c447c;
-  /* Purpleish input background */
-  border: 2px solid #2e1a47;
+  background: rgba(24, 32, 40, 0.9);
+  border: 2px solid rgba(88, 107, 125, 0.6);
   border-radius: 999px;
-  /* Pill shape */
   padding: 14px 24px;
   text-align: center;
-  color: #e0e7ff;
+  color: #e8edf2;
   font-size: 16px;
   font-weight: 500;
   outline: none;
@@ -832,23 +827,23 @@ body.game-playing #root {
 
 .slither-input:focus {
   transform: scale(1.02);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(167, 139, 250, 0.3);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(118, 228, 165, 0.25);
 }
 
 .slither-input::placeholder {
-  color: rgba(224, 231, 255, 0.4);
+  color: rgba(200, 214, 228, 0.45);
 }
 
 .slither-button {
-  background: linear-gradient(to bottom, #4ade80, #22c55e);
+  background: linear-gradient(to bottom, #6fe0a0, #39b86d);
   border: none;
   border-radius: 999px;
   padding: 14px 48px;
-  color: #fff;
+  color: #0b1a12;
   font-size: 18px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 0 #15803d, 0 8px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 0 #1d7a47, 0 8px 12px rgba(0, 0, 0, 0.3);
   text-transform: capitalize;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   transition: transform 0.1s, box-shadow 0.1s;
@@ -857,7 +852,7 @@ body.game-playing #root {
 
 .slither-button:active {
   transform: translateY(4px);
-  box-shadow: 0 0 0 #15803d, 0 4px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 #1d7a47, 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 .slither-button:disabled {
