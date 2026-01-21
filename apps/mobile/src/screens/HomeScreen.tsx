@@ -45,10 +45,57 @@ export function HomeScreen(): JSX.Element {
   const [pixKeyType, setPixKeyType] = useState<PixKeyType>('email');
   const [pixKey, setPixKey] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
 
   useEffect(() => {
     void loadInitialData();
   }, [signedIn, accountId]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(pointer: coarse)');
+    const update = () => setIsMobile(media.matches);
+    update();
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', update);
+      return () => media.removeEventListener('change', update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
+
+  useEffect(() => {
+    const update = () => {
+      if (!isMobile) {
+        setIsPortrait(false);
+        return;
+      }
+      setIsPortrait(window.matchMedia('(orientation: portrait)').matches);
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      return;
+    }
+    const orientation = screen.orientation;
+    if (!orientation || typeof orientation.lock !== 'function') {
+      return;
+    }
+    orientation.lock('landscape').catch(() => undefined);
+    return () => {
+      if (typeof orientation.unlock === 'function') {
+        orientation.unlock();
+      }
+    };
+  }, [isMobile]);
 
   useEffect(() => {
     if (signedIn) {
@@ -272,6 +319,14 @@ export function HomeScreen(): JSX.Element {
       {/* Background/Particles could go here if we had them */}
       <div className="slither-background" />
       {renderAuthModal()}
+      {isMobile && isPortrait ? (
+        <div className="landscape-overlay">
+          <div className="landscape-card">
+            <div className="landscape-title">Gire o celular</div>
+            <div className="landscape-subtitle">Este jogo funciona em modo horizontal.</div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Top Left: Identity */}
       <div className="slither-corner top-left">

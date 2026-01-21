@@ -962,6 +962,39 @@ body.game-playing #root {
   width: min(520px, 92vw);
 }
 
+.landscape-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 10, 14, 0.85);
+  backdrop-filter: blur(6px);
+  padding: 24px;
+}
+
+.landscape-card {
+  max-width: 320px;
+  text-align: center;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(88, 107, 125, 0.4);
+  background: rgba(10, 14, 18, 0.9);
+}
+
+.landscape-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--sand);
+}
+
+.landscape-subtitle {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--clay);
+}
+
 .slither-text {
   color: #cbd5e1;
   font-size: 14px;
