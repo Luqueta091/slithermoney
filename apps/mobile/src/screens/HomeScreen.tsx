@@ -220,7 +220,7 @@ export function HomeScreen(): JSX.Element {
     return (
       <div className="auth-overlay">
         <div className="auth-card">
-          {needsIdentity ? (
+          {authMode === 'signup' || needsIdentity ? (
             <IdentityScreen
               accountId={accountId}
               fullName={fullName}
@@ -256,6 +256,14 @@ export function HomeScreen(): JSX.Element {
                   pixKeyType,
                 })
               }
+              onSwitchToLogin={() => {
+                auth.resetError();
+                setAuthMode('login');
+              }}
+              onBack={() => {
+                auth.resetError();
+                setAuthOpen(false);
+              }}
               onSignOut={() => {
                 auth.signOut();
                 setAuthOpen(false);

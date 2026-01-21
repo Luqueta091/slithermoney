@@ -26,6 +26,8 @@ type IdentityScreenProps = {
   onPixKeyTypeChange: (value: PixKeyType) => void;
   onSubmit: () => void;
   onSignOut: () => void;
+  onSwitchToLogin?: () => void;
+  onBack?: () => void;
   error?: string | null;
 };
 
@@ -43,6 +45,8 @@ export function IdentityScreen({
   onPixKeyTypeChange,
   onSubmit,
   onSignOut,
+  onSwitchToLogin,
+  onBack,
   error,
 }: IdentityScreenProps): JSX.Element {
   return (
@@ -108,7 +112,14 @@ export function IdentityScreen({
 
       <div className="actions">
         <ActionButton label="Salvar identidade" onClick={onSubmit} disabled={!termsAccepted} />
-        <ActionButton label="Sair" onClick={onSignOut} variant="ghost" />
+        {onSwitchToLogin ? (
+          <ActionButton label="Já tenho conta" onClick={onSwitchToLogin} variant="ghost" />
+        ) : null}
+        {onBack ? (
+          <ActionButton label="Voltar" onClick={onBack} variant="ghost" />
+        ) : (
+          <ActionButton label="Sair" onClick={onSignOut} variant="ghost" />
+        )}
       </div>
     </ScreenContainer>
   );
