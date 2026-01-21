@@ -7,8 +7,8 @@ import {
   upsertIdentity,
 } from '../api/client';
 import { clearSession, loadSession, saveSession } from '../storage/session';
-import { generateAccountId } from '../utils/uuid';
-import { isUuid } from '../utils/validation';
+import { generateAccountId, generateAccountIdFromEmail } from '../utils/uuid';
+import { isEmail } from '../utils/validation';
 
 type AuthStatus = 'loading' | 'signedOut' | 'needsIdentity' | 'signedIn';
 
@@ -17,7 +17,7 @@ type AuthContextValue = {
   accountId: string | null;
   identity: IdentityProfile | null;
   error: string | null;
-  signIn: (accountId: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signUp: () => Promise<void>;
   completeIdentity: (input: IdentityInput) => Promise<void>;
   signOut: () => void;
@@ -67,17 +67,22 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     }
   };
 
-  const signIn = async (id: string): Promise<void> => {
+  const signIn = async (email: string, password: string): Promise<void> => {
     setError(null);
-    const trimmed = id.trim();
-    if (!isUuid(trimmed)) {
-      setError('Account id invalido');
+    const trimmedEmail = email.trim();
+    if (!isEmail(trimmedEmail)) {
+      setError('Email invalido');
+      return;
+    }
+    if (password.trim().length < 4) {
+      setError('Senha invalida');
       return;
     }
 
-    saveSession(trimmed);
-    setAccountId(trimmed);
-    await refreshIdentity(trimmed);
+    const derivedId = generateAccountIdFromEmail(trimmedEmail);
+    saveSession(derivedId);
+    setAccountId(derivedId);
+    await refreshIdentity(derivedId);
   };
 
   const signUp = async (): Promise<void> => {

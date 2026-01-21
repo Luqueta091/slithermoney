@@ -4,6 +4,11 @@ export function isUuid(value: string): boolean {
   return UUID_REGEX.test(value);
 }
 
+export function isEmail(value: string): boolean {
+  const trimmed = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
 export function sanitizeCpf(value: string): string {
   return value.replace(/\D/g, '');
 }

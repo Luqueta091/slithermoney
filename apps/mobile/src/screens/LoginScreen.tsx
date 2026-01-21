@@ -4,16 +4,20 @@ import { Reveal } from '../components/Reveal';
 import { ScreenContainer } from '../components/ScreenContainer';
 
 type LoginScreenProps = {
-  accountId: string;
-  onAccountIdChange: (value: string) => void;
+  email: string;
+  password: string;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
   onSubmit: () => void;
   onBack: () => void;
   error?: string | null;
 };
 
 export function LoginScreen({
-  accountId,
-  onAccountIdChange,
+  email,
+  password,
+  onEmailChange,
+  onPasswordChange,
   onSubmit,
   onBack,
   error,
@@ -28,16 +32,24 @@ export function LoginScreen({
           <h1 className="title">Entrar</h1>
         </Reveal>
         <Reveal delay={220}>
-          <p className="subtitle">Use o account id salvo para acessar sua sessao.</p>
+          <p className="subtitle">Use seu email e senha para acessar sua sessao.</p>
         </Reveal>
       </div>
 
       <div className="card">
         <InputField
-          label="Account id"
-          value={accountId}
-          onChange={onAccountIdChange}
-          placeholder="00000000-0000-0000-0000-000000000000"
+          label="Email"
+          value={email}
+          onChange={onEmailChange}
+          placeholder="voce@email.com"
+          type="email"
+        />
+        <InputField
+          label="Senha"
+          value={password}
+          onChange={onPasswordChange}
+          placeholder="••••••••"
+          type="password"
         />
         {error ? <p className="error">{error}</p> : null}
       </div>

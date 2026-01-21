@@ -42,7 +42,8 @@ function AppContent(): JSX.Element {
 function AuthFlow(): JSX.Element {
   const auth = useAuth();
   const [mode, setMode] = useState<'welcome' | 'login'>('welcome');
-  const [accountId, setAccountId] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   if (mode === 'welcome') {
     return (
@@ -58,12 +59,17 @@ function AuthFlow(): JSX.Element {
 
   return (
     <LoginScreen
-      accountId={accountId}
-      onAccountIdChange={(value) => {
+      email={email}
+      password={password}
+      onEmailChange={(value) => {
         auth.resetError();
-        setAccountId(value);
+        setEmail(value);
       }}
-      onSubmit={() => auth.signIn(accountId)}
+      onPasswordChange={(value) => {
+        auth.resetError();
+        setPassword(value);
+      }}
+      onSubmit={() => auth.signIn(email, password)}
       onBack={() => {
         auth.resetError();
         setMode('welcome');

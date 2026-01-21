@@ -29,7 +29,7 @@ export function WelcomeScreen({ onCreate, onLogin }: WelcomeScreenProps): JSX.El
           <ActionButton label="Criar conta" onClick={onCreate} />
         </Reveal>
         <Reveal delay={420}>
-          <ActionButton label="Entrar com account id" onClick={onLogin} variant="ghost" />
+          <ActionButton label="Entrar" onClick={onLogin} variant="ghost" />
         </Reveal>
       </div>
     </ScreenContainer>
