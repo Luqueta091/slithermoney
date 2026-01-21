@@ -8,34 +8,81 @@ const legacyWebhookSchema = z.object({
   currency: z.string().length(3).optional(),
 });
 
-const bspayWebhookSchema = z
+const amountSchema = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    const normalized = value.replace(',', '.');
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+  return value;
+}, z.number().positive());
+
+const transactionIdSchema = z.preprocess((value) => {
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  return value;
+}, z.string().min(1));
+
+const bspayBodySchema = z
   .object({
-    requestBody: z.object({
-      transactionType: z.literal('RECEIVEPIX'),
-      transactionId: z.string().min(1),
-      external_id: z.string().optional(),
-      amount: z.number().positive(),
-      paymentType: z.string().optional(),
-      status: z.string().optional(),
-      dateApproval: z.string().optional(),
-      creditParty: z
-        .object({
-          name: z.string().optional(),
-          email: z.string().optional(),
-          taxId: z.string().optional(),
-        })
-        .optional(),
-    }),
+    transactionType: z.string().optional(),
+    transactionId: transactionIdSchema.optional(),
+    pix_id: transactionIdSchema.optional(),
+    pixId: transactionIdSchema.optional(),
+    external_id: z.string().optional(),
+    amount: amountSchema,
+    paymentType: z.string().optional(),
+    status: z.string().optional(),
+    statusCode: z
+      .object({
+        statusId: z.number().optional(),
+        description: z.string().optional(),
+      })
+      .optional(),
+    dateApproval: z.string().optional(),
+    creditParty: z
+      .object({
+        name: z.string().optional(),
+        email: z.string().optional(),
+        taxId: z.string().optional(),
+      })
+      .optional(),
   })
-  .refine((data) => !data.requestBody.status || data.requestBody.status === 'PAID', {
+  .refine((data) => {
+    if (data.status) {
+      const normalized = data.status.toUpperCase();
+      return ['PAID', 'CONFIRMED', 'APPROVED'].includes(normalized);
+    }
+    if (data.statusCode?.statusId !== undefined) {
+      return data.statusCode.statusId === 1;
+    }
+    return true;
+  }, {
     message: 'status must be PAID',
-  })
-  .transform((data) => ({
-    txid: data.requestBody.transactionId,
-    amountCents: Math.round(data.requestBody.amount * 100),
-    currency: 'BRL',
-    e2eId: undefined,
-  }));
+  });
+
+const bspayWebhookSchema = z
+  .union([
+    z.object({ requestBody: bspayBodySchema }),
+    bspayBodySchema,
+  ])
+  .transform((data) => {
+    const body = 'requestBody' in data ? data.requestBody : data;
+    const txid =
+      body.transactionId ??
+      body.pix_id ??
+      body.pixId ??
+      body.external_id ??
+      '';
+    return {
+      txid,
+      externalId: body.external_id,
+      amountCents: Math.round(body.amount * 100),
+      currency: 'BRL',
+      e2eId: undefined,
+    };
+  });
 
 export const pixWebhookInputSchema = z.union([
   legacyWebhookSchema,

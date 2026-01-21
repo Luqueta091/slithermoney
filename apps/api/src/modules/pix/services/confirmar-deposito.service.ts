@@ -16,7 +16,10 @@ export class ConfirmarDepositoService {
   ) {}
 
   async confirm(input: PixWebhookInput): Promise<PixTransactionRecord> {
-    const transaction = await this.pixRepository.findByTxid(input.txid);
+    let transaction = input.txid ? await this.pixRepository.findByTxid(input.txid) : null;
+    if (!transaction && input.externalId) {
+      transaction = await this.pixRepository.findByIdempotencyKey(input.externalId);
+    }
 
     if (!transaction) {
       throw new HttpError(404, 'pix_transaction_not_found', 'Transacao Pix nao encontrada');
@@ -31,7 +34,14 @@ export class ConfirmarDepositoService {
     }
 
     const currency = normalizeCurrency(input.currency);
-    const amountCents = BigInt(input.amountCents);
+    let amountCents = BigInt(input.amountCents);
+
+    if (transaction.amountCents !== amountCents && input.amountCents % 100 === 0) {
+      const maybeCents = BigInt(input.amountCents / 100);
+      if (transaction.amountCents === maybeCents) {
+        amountCents = maybeCents;
+      }
+    }
 
     if (transaction.currency !== currency) {
       throw new HttpError(409, 'pix_transaction_conflict', 'Moeda divergente');
@@ -51,8 +61,9 @@ export class ConfirmarDepositoService {
 
     let confirmationMs: number | null = null;
     const result = await this.prisma.$transaction(async (tx) => {
+      const resolvedTxid = transaction.txid ?? input.txid;
       const confirmed = await this.pixRepository.confirmDeposit(tx, {
-        txid: input.txid,
+        txid: resolvedTxid,
         e2eId: input.e2eId ?? null,
       });
 
