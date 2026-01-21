@@ -345,14 +345,16 @@ export function HomeScreen(): JSX.Element {
       </div>
 
       {/* Top Right: Wallet */}
-      <div className="slither-corner top-right">
-        <div className="slither-text">
-          Sua Carteira
+      {!authOpen && !needsIdentity ? (
+        <div className="slither-corner top-right">
+          <div className="slither-text">
+            Sua Carteira
+          </div>
+          <div className="slither-text" style={{ fontSize: 18, color: '#fff' }}>
+            {formatCents(wallet?.available_balance_cents ?? '0')}
+          </div>
         </div>
-        <div className="slither-text" style={{ fontSize: 18, color: '#fff' }}>
-          {formatCents(wallet?.available_balance_cents ?? '0')}
-        </div>
-      </div>
+      ) : null}
 
       {/* Center: Title & Play Form */}
       <div className="slither-center">
@@ -411,71 +413,77 @@ export function HomeScreen(): JSX.Element {
       </div>
 
       {/* Bottom Left: Actions */}
-      <div className="slither-corner bottom-left">
-        <div
-          className="slither-link-column"
-          onClick={() => {
-            if (!ensureAuthenticated('deposit')) {
-              return;
-            }
-            setTab('deposit');
-          }}
-        >
-          <div className="slither-link-icon">
-            <span style={{ fontSize: 24, color: '#e2e8f0' }}>+</span>
+      {!authOpen && !needsIdentity ? (
+        <div className="slither-corner bottom-left">
+          <div
+            className="slither-link-column"
+            onClick={() => {
+              if (!ensureAuthenticated('deposit')) {
+                return;
+              }
+              setTab('deposit');
+            }}
+          >
+            <div className="slither-link-icon">
+              <span style={{ fontSize: 24, color: '#e2e8f0' }}>+</span>
+            </div>
+            <span className="slither-link-label">Depositar</span>
           </div>
-          <span className="slither-link-label">Depositar</span>
         </div>
-      </div>
+      ) : null}
 
       {/* Bottom Right: History/Withdraw */}
-      <div className="slither-corner bottom-right">
-        <div style={{ display: 'flex', gap: 24 }}>
-          <div
-            className="slither-link-column"
-            onClick={() => {
-              if (!ensureAuthenticated('withdraw')) {
-                return;
-              }
-              setTab('withdraw');
-            }}
-          >
-            <div className="slither-link-icon">
-              <span style={{ fontSize: 24, color: '#e2e8f0' }}>$</span>
+      {!authOpen && !needsIdentity ? (
+        <div className="slither-corner bottom-right">
+          <div style={{ display: 'flex', gap: 24 }}>
+            <div
+              className="slither-link-column"
+              onClick={() => {
+                if (!ensureAuthenticated('withdraw')) {
+                  return;
+                }
+                setTab('withdraw');
+              }}
+            >
+              <div className="slither-link-icon">
+                <span style={{ fontSize: 24, color: '#e2e8f0' }}>$</span>
+              </div>
+              <span className="slither-link-label">Sacar</span>
             </div>
-            <span className="slither-link-label">Sacar</span>
-          </div>
-          <div
-            className="slither-link-column"
-            onClick={() => {
-              if (!ensureAuthenticated('history')) {
-                return;
-              }
-              setTab('history');
-            }}
-          >
-            <div className="slither-link-icon">
-              <span style={{ fontSize: 24, color: '#e2e8f0' }}>H</span>
+            <div
+              className="slither-link-column"
+              onClick={() => {
+                if (!ensureAuthenticated('history')) {
+                  return;
+                }
+                setTab('history');
+              }}
+            >
+              <div className="slither-link-icon">
+                <span style={{ fontSize: 24, color: '#e2e8f0' }}>H</span>
+              </div>
+              <span className="slither-link-label">Histórico</span>
             </div>
-            <span className="slither-link-label">Histórico</span>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Very Bottom: Footer Links */}
-      <div style={{
-        position: 'absolute',
-        bottom: 10,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: 16,
-        opacity: 0.5
-      }}>
-        <span className="slither-text" style={{ fontSize: 10 }}>privacy</span>
-        <span className="slither-text" style={{ fontSize: 10 }}>terms</span>
-        <span className="slither-text" style={{ fontSize: 10 }}>contact</span>
-      </div>
+      {!authOpen && !needsIdentity ? (
+        <div style={{
+          position: 'absolute',
+          bottom: 10,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: 16,
+          opacity: 0.5
+        }}>
+          <span className="slither-text" style={{ fontSize: 10 }}>privacy</span>
+          <span className="slither-text" style={{ fontSize: 10 }}>terms</span>
+          <span className="slither-text" style={{ fontSize: 10 }}>contact</span>
+        </div>
+      ) : null}
 
     </div>
   );

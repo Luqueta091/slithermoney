@@ -962,6 +962,14 @@ body.game-playing #root {
   width: min(520px, 92vw);
 }
 
+.auth-card .hero {
+  margin-bottom: 10px;
+}
+
+.auth-card .card {
+  gap: 10px;
+}
+
 .landscape-overlay {
   position: absolute;
   inset: 0;
