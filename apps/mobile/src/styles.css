@@ -952,14 +952,16 @@ body.game-playing #root {
   inset: 0;
   background: rgba(6, 10, 14, 0.72);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 10;
   padding: 24px;
+  overflow-y: auto;
 }
 
 .auth-card {
   width: min(520px, 92vw);
+  margin: auto 0;
 }
 
 .auth-card .hero {
@@ -968,6 +970,20 @@ body.game-playing #root {
 
 .auth-card .card {
   gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .auth-overlay {
+    padding: 16px 12px 24px;
+  }
+
+  .auth-card {
+    width: min(520px, 96vw);
+  }
+
+  .auth-card .actions {
+    gap: 10px;
+  }
 }
 
 .landscape-overlay {
