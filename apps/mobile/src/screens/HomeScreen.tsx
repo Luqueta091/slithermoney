@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { type IdentityProfile, type RunStartResponse, type Stake, type Wallet, getWallet, listStakes, startRun } from '../api/client';
+import { type RunStartResponse, type Stake, type Wallet, getWallet, listStakes, startRun } from '../api/client';
 import { ActionButton } from '../components/ActionButton';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { formatCents } from '../utils/format';
@@ -7,6 +7,10 @@ import { DepositScreen } from './DepositScreen';
 import { WithdrawScreen } from './WithdrawScreen';
 import { HistoryScreen } from './HistoryScreen';
 import { GameScreen } from './GameScreen';
+import { useAuth } from '../context/auth';
+import { InputField } from '../components/InputField';
+import { IdentityScreen, type PixKeyType } from './IdentityScreen';
+import { sanitizeCpf } from '../utils/validation';
 
 const TABS = [
   { id: 'lobby', label: 'Lobby' },
@@ -18,13 +22,12 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
-type HomeScreenProps = {
-  accountId: string;
-  identity: IdentityProfile | null;
-  onSignOut: () => void;
-};
-
-export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps): JSX.Element {
+export function HomeScreen(): JSX.Element {
+  const auth = useAuth();
+  const signedIn = auth.status === 'signedIn';
+  const needsIdentity = auth.status === 'needsIdentity';
+  const accountId = auth.accountId ?? '';
+  const identity = auth.identity;
   const [tab, setTab] = useState<TabId>('lobby');
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [stakes, setStakes] = useState<Stake[]>([]);
@@ -33,18 +36,42 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
   const [run, setRun] = useState<RunStartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRun, setLoadingRun] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [pixKeyType, setPixKeyType] = useState<PixKeyType>('email');
+  const [pixKey, setPixKey] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
     void loadInitialData();
-  }, []);
+  }, [signedIn, accountId]);
+
+  useEffect(() => {
+    if (signedIn) {
+      setAuthOpen(false);
+    }
+    if (needsIdentity) {
+      setAuthOpen(true);
+      setAuthMode('signup');
+    }
+  }, [signedIn, needsIdentity]);
 
   const loadInitialData = async (): Promise<void> => {
     try {
-      const [walletResult, stakesResult] = await Promise.all([getWallet(accountId), listStakes()]);
-      setWallet(walletResult);
+      const stakesResult = await listStakes();
       setStakes(stakesResult);
       if (!selectedStakeId && stakesResult.length > 0) {
         setSelectedStakeId(stakesResult[0].id);
+      }
+      if (signedIn && accountId) {
+        const walletResult = await getWallet(accountId);
+        setWallet(walletResult);
+      } else {
+        setWallet(null);
       }
     } catch (err) {
       setError(resolveError(err));
@@ -53,6 +80,9 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
 
   const refreshWallet = async (): Promise<void> => {
     try {
+      if (!signedIn || !accountId) {
+        return;
+      }
       const walletResult = await getWallet(accountId);
       setWallet(walletResult);
     } catch (err) {
@@ -74,6 +104,9 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
   }, [customStake, selectedStake]);
 
   const handleStartRun = async (): Promise<void> => {
+    if (!ensureAuthenticated('play')) {
+      return;
+    }
     if (!stakeCents || stakeCents <= 0) {
       setError('Informe uma stake valida');
       return;
@@ -132,20 +165,128 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
     );
   }
 
+  const renderAuthModal = (): JSX.Element | null => {
+    if (!authOpen && !needsIdentity) {
+      return null;
+    }
+
+    return (
+      <div className="auth-overlay">
+        <div className="auth-card">
+          {needsIdentity ? (
+            <IdentityScreen
+              accountId={accountId}
+              fullName={fullName}
+              cpf={cpf}
+              pixKey={pixKey}
+              pixKeyType={pixKeyType}
+              termsAccepted={termsAccepted}
+              onTermsChange={(value) => {
+                auth.resetError();
+                setTermsAccepted(value);
+              }}
+              onFullNameChange={(value) => {
+                auth.resetError();
+                setFullName(value);
+              }}
+              onCpfChange={(value) => {
+                auth.resetError();
+                setCpf(value);
+              }}
+              onPixKeyChange={(value) => {
+                auth.resetError();
+                setPixKey(value);
+              }}
+              onPixKeyTypeChange={(value) => {
+                auth.resetError();
+                setPixKeyType(value);
+              }}
+              onSubmit={() =>
+                auth.completeIdentity({
+                  fullName: fullName.trim(),
+                  cpf: sanitizeCpf(cpf),
+                  pixKey: pixKey.trim(),
+                  pixKeyType,
+                })
+              }
+              onSignOut={() => {
+                auth.signOut();
+                setAuthOpen(false);
+                setTermsAccepted(false);
+              }}
+              error={auth.error}
+            />
+          ) : (
+            <>
+              <div className="hero">
+                <p className="kicker">Sessao</p>
+                <h2 className="title">Entrar</h2>
+                <p className="subtitle">Use seu email e senha para continuar.</p>
+              </div>
+              <div className="card">
+                <InputField
+                  label="Email"
+                  value={email}
+                  onChange={(value) => {
+                    auth.resetError();
+                    setEmail(value);
+                  }}
+                  placeholder="voce@email.com"
+                  type="email"
+                />
+                <InputField
+                  label="Senha"
+                  value={password}
+                  onChange={(value) => {
+                    auth.resetError();
+                    setPassword(value);
+                  }}
+                  placeholder="••••••••"
+                  type="password"
+                />
+                {auth.error ? <p className="error">{auth.error}</p> : null}
+              </div>
+              <div className="actions">
+                <ActionButton label="Entrar" onClick={() => auth.signIn(email, password)} />
+                <ActionButton
+                  label="Criar conta"
+                  onClick={() => {
+                    auth.resetError();
+                    setAuthMode('signup');
+                    auth.signUp();
+                  }}
+                  variant="ghost"
+                />
+                <ActionButton label="Fechar" onClick={() => setAuthOpen(false)} variant="ghost" />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // LOBBY VIEW (Slither Style)
   return (
     <div className="slither-container">
       {/* Background/Particles could go here if we had them */}
       <div className="slither-background" />
+      {renderAuthModal()}
 
       {/* Top Left: Identity */}
       <div className="slither-corner top-left">
         <div className="slither-text">
           <strong>{identity?.full_name ?? 'Jogador'}</strong>
         </div>
-        <button type="button" className="slither-link" onClick={onSignOut}>
-          Sair
-        </button>
+        {signedIn ? (
+          <button type="button" className="slither-link" onClick={auth.signOut}>
+            Sair
+          </button>
+        ) : (
+          <button type="button" className="slither-link" onClick={() => setAuthOpen(true)}>
+            Entrar
+          </button>
+        )}
       </div>
 
       {/* Top Right: Wallet */}
@@ -216,7 +357,15 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
 
       {/* Bottom Left: Actions */}
       <div className="slither-corner bottom-left">
-        <div className="slither-link-column" onClick={() => setTab('deposit')}>
+        <div
+          className="slither-link-column"
+          onClick={() => {
+            if (!ensureAuthenticated('deposit')) {
+              return;
+            }
+            setTab('deposit');
+          }}
+        >
           <div className="slither-link-icon">
             <span style={{ fontSize: 24, color: '#e2e8f0' }}>+</span>
           </div>
@@ -227,13 +376,29 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
       {/* Bottom Right: History/Withdraw */}
       <div className="slither-corner bottom-right">
         <div style={{ display: 'flex', gap: 24 }}>
-          <div className="slither-link-column" onClick={() => setTab('withdraw')}>
+          <div
+            className="slither-link-column"
+            onClick={() => {
+              if (!ensureAuthenticated('withdraw')) {
+                return;
+              }
+              setTab('withdraw');
+            }}
+          >
             <div className="slither-link-icon">
               <span style={{ fontSize: 24, color: '#e2e8f0' }}>$</span>
             </div>
             <span className="slither-link-label">Sacar</span>
           </div>
-          <div className="slither-link-column" onClick={() => setTab('history')}>
+          <div
+            className="slither-link-column"
+            onClick={() => {
+              if (!ensureAuthenticated('history')) {
+                return;
+              }
+              setTab('history');
+            }}
+          >
             <div className="slither-link-icon">
               <span style={{ fontSize: 24, color: '#e2e8f0' }}>H</span>
             </div>
@@ -259,6 +424,18 @@ export function HomeScreen({ accountId, identity, onSignOut }: HomeScreenProps):
 
     </div>
   );
+
+  function ensureAuthenticated(nextTab?: TabId): boolean {
+    if (signedIn) {
+      return true;
+    }
+    setAuthOpen(true);
+    setAuthMode('login');
+    if (nextTab) {
+      setTab('lobby');
+    }
+    return false;
+  }
 }
 
 function parseAmountToCents(value: string): number | null {

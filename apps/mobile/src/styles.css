@@ -947,6 +947,21 @@ body.game-playing #root {
   cursor: pointer;
 }
 
+.auth-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 10, 14, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(520px, 92vw);
+}
+
 .slither-text {
   color: #cbd5e1;
   font-size: 14px;
