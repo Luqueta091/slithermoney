@@ -216,7 +216,7 @@ export function HomeScreen(): JSX.Element {
   }
 
   const renderAuthModal = (): JSX.Element | null => {
-    if (!authOpen && !needsIdentity) {
+    if (!authOpen) {
       return null;
     }
 
