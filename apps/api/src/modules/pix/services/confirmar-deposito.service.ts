@@ -55,10 +55,6 @@ export class ConfirmarDepositoService {
       return transaction;
     }
 
-    if (transaction.status === 'FAILED') {
-      throw new HttpError(409, 'pix_transaction_conflict', 'Transacao Pix falhou');
-    }
-
     let confirmationMs: number | null = null;
     const result = await this.prisma.$transaction(async (tx) => {
       const resolvedTxid = transaction.txid ?? input.txid;
@@ -74,10 +70,6 @@ export class ConfirmarDepositoService {
 
         if (!current) {
           throw new HttpError(404, 'pix_transaction_not_found', 'Transacao Pix nao encontrada');
-        }
-
-        if (current.status === 'FAILED') {
-          throw new HttpError(409, 'pix_transaction_conflict', 'Transacao Pix falhou');
         }
 
         return mapPixTransaction(current);

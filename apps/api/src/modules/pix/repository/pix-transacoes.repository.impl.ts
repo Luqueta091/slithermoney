@@ -64,7 +64,7 @@ export class PixTransacoesRepositoryPrisma implements PixTransacoesRepository {
     const updated = await tx.pixTransaction.updateMany({
       where: {
         txid: input.txid,
-        status: 'PENDING',
+        status: { in: ['PENDING', 'FAILED'] },
       },
       data: {
         status: 'CONFIRMED',

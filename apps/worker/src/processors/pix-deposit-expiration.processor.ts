@@ -72,12 +72,21 @@ export async function expirePendingDeposits(expirationMs: number): Promise<numbe
 
 function isExpired(deposit: PendingDeposit, expirationMs: number, now: number): boolean {
   const expirationDate = extractExpirationDate(deposit.payload);
+  const createdMs = deposit.createdAt.getTime();
+  const minExpiry = createdMs + expirationMs;
 
   if (expirationDate) {
-    return expirationDate.getTime() <= now;
+    const expiresAt = expirationDate.getTime();
+    if (Number.isFinite(expiresAt) && expiresAt > 0) {
+      // Avoid expiring earlier than the configured minimum window.
+      if (expiresAt < minExpiry) {
+        return minExpiry <= now;
+      }
+      return expiresAt <= now;
+    }
   }
 
-  return deposit.createdAt.getTime() + expirationMs <= now;
+  return minExpiry <= now;
 }
 
 function extractExpirationDate(payload: unknown): Date | null {
