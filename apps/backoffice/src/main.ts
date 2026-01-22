@@ -16,6 +16,7 @@ import { handleWalletAdjust } from './modules/ledger/controllers/ledger-adjust.c
 import { handleRuns } from './modules/runs/controllers/runs.controller';
 import { handleUpdateStake } from './modules/config/controllers/stakes.controller';
 import { handleResolveFraudFlag } from './modules/fraud/controllers/fraud-flags.controller';
+import { handleWithdrawalsUi } from './modules/ui/withdrawals-ui';
 import { HttpError, isHttpError } from './shared/http/http-error';
 import { withRequestContext } from './shared/http/request-context';
 import { sendError, sendJson } from './shared/http/response';
@@ -38,6 +39,7 @@ const routes: Record<string, Handler> = {
   'GET /users': handleUserLookup,
   'POST /users/ban': handleBanUser,
   'POST /users/unban': handleUnbanUser,
+  'GET /backoffice': handleWithdrawalsUi,
   'GET /pix/transactions': handlePixTransactions,
   'POST /pix/transactions/reprocess': handlePixReprocess,
   'POST /pix/withdrawals/approve': handlePixWithdrawalApprove,
