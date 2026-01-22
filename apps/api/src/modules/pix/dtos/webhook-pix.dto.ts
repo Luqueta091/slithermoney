@@ -6,7 +6,10 @@ const legacyWebhookSchema = z.object({
   e2eId: z.string().min(1).optional(),
   amountCents: z.number().int().positive(),
   currency: z.string().length(3).optional(),
-});
+}).transform((data) => ({
+  ...data,
+  externalId: undefined,
+}));
 
 const amountSchema = z.preprocess((value) => {
   if (typeof value === 'string') {
