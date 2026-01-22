@@ -10,7 +10,7 @@ import { isUuid } from '../../../shared/validation/uuid';
 
 type PixReprocessRequest = {
   transaction_id: string;
-  action?: 'REPAIR_DEPOSIT' | 'MARK_PAID' | 'MARK_FAILED' | string;
+  action?: 'REPAIR_DEPOSIT' | 'MARK_PAID' | 'MARK_FAILED' | 'APPROVE' | string;
   reason?: string;
   metadata?: Record<string, unknown> | null;
 };
@@ -56,8 +56,8 @@ export async function handlePixReprocess(req: IncomingMessage, res: ServerRespon
     }
 
     if (transaction.txType === 'WITHDRAWAL') {
-      const action = normalizeAction(body.action);
-      const updated = await resolveWithdrawal(tx, transaction, action, body);
+  const action = normalizeAction(body.action);
+  const updated = await resolveWithdrawal(tx, transaction, action, body);
 
       await recordAuditLog(tx, {
         action: `backoffice.pix.withdrawal_${action.toLowerCase()}`,
@@ -207,7 +207,7 @@ async function resolveWithdrawal(
     txid?: string | null;
     externalReference?: string | null;
   },
-  action: 'MARK_PAID' | 'MARK_FAILED',
+  action: 'MARK_PAID' | 'MARK_FAILED' | 'APPROVE',
   body: PixReprocessRequest,
 ): Promise<WithdrawalResolutionResult> {
   if (transaction.status === 'PAID' || transaction.status === 'FAILED') {
@@ -226,7 +226,47 @@ async function resolveWithdrawal(
     throw new HttpError(409, 'pix_transaction_invalid', 'Transacao Pix ja finalizada');
   }
 
-  if (transaction.status !== 'REQUESTED') {
+  if (action === 'APPROVE') {
+    if (transaction.status === 'REQUESTED') {
+      return {
+        updated: false,
+        transaction,
+        before: null,
+        after: null,
+      };
+    }
+
+    if (transaction.status !== 'PENDING_APPROVAL') {
+      throw new HttpError(409, 'pix_transaction_invalid', 'Transacao Pix nao aguardando aprovacao');
+    }
+
+    const updated = await tx.pixTransaction.updateMany({
+      where: { id: transaction.id, status: 'PENDING_APPROVAL' },
+      data: {
+        status: 'REQUESTED',
+        updatedAt: new Date(),
+      },
+    });
+
+    if (updated.count === 0) {
+      return { updated: false, transaction, before: null, after: null };
+    }
+
+    const updatedTransaction = await tx.pixTransaction.findUnique({ where: { id: transaction.id } });
+
+    return {
+      updated: true,
+      transaction: updatedTransaction ?? transaction,
+      before: {
+        transaction_status: transaction.status,
+      } as Prisma.InputJsonValue,
+      after: {
+        transaction_status: updatedTransaction?.status ?? 'REQUESTED',
+      } as Prisma.InputJsonValue,
+    };
+  }
+
+  if (action === 'MARK_PAID' && transaction.status !== 'REQUESTED') {
     throw new HttpError(409, 'pix_transaction_invalid', 'Transacao Pix nao esta pendente');
   }
 
@@ -315,7 +355,7 @@ async function resolveWithdrawal(
   }
 
   const updated = await tx.pixTransaction.updateMany({
-    where: { id: transaction.id, status: 'REQUESTED' },
+    where: { id: transaction.id, status: { in: ['REQUESTED', 'PENDING_APPROVAL'] } },
     data: {
       status: 'FAILED',
       completedAt: new Date(),
@@ -375,13 +415,15 @@ async function resolveWithdrawal(
   };
 }
 
-function normalizeAction(value: PixReprocessRequest['action']): 'MARK_PAID' | 'MARK_FAILED' {
+function normalizeAction(
+  value: PixReprocessRequest['action'],
+): 'MARK_PAID' | 'MARK_FAILED' | 'APPROVE' {
   if (!value) {
     throw new HttpError(400, 'invalid_action', 'action obrigatoria');
   }
 
   const normalized = value.toUpperCase();
-  if (normalized === 'MARK_PAID' || normalized === 'MARK_FAILED') {
+  if (normalized === 'MARK_PAID' || normalized === 'MARK_FAILED' || normalized === 'APPROVE') {
     return normalized;
   }
 

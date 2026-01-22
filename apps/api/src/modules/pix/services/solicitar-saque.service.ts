@@ -51,7 +51,7 @@ export class SolicitarSaqueService {
           {
             accountId,
             txType: 'WITHDRAWAL',
-            status: 'REQUESTED',
+            status: 'PENDING_APPROVAL',
             amountCents: amount,
             currency,
             idempotencyKey: resolvedKey,

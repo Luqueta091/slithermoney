@@ -6,6 +6,7 @@ export const pixTransactionStatusSchema = z.enum([
   'CONFIRMED',
   'FAILED',
   'REQUESTED',
+  'PENDING_APPROVAL',
   'PAID',
 ]);
 
