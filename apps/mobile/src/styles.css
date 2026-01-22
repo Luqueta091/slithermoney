@@ -40,6 +40,15 @@ input {
   font-family: inherit;
 }
 
+button,
+.button,
+.slither-button,
+.mobile-button {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -604,8 +613,10 @@ body.game-playing #root {
   z-index: 40;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: calc(24px + env(safe-area-inset-top)) 24px
+    calc(24px + env(safe-area-inset-bottom));
   pointer-events: auto;
+  overflow: auto;
 }
 
 .run-result-backdrop {
@@ -619,6 +630,8 @@ body.game-playing #root {
   position: relative;
   z-index: 1;
   width: min(92vw, 420px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
   background: rgba(9, 14, 20, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 18px;
