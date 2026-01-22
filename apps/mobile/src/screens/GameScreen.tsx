@@ -738,9 +738,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     }
 
     const view = viewRef.current;
-    const dx = inputRef.current.mouseX - view.vw / 2;
-    const dy = inputRef.current.mouseY - view.vh / 2;
-    const angle = Math.atan2(dy, dx);
+    const mouseDx = inputRef.current.mouseX - view.vw / 2;
+    const mouseDy = inputRef.current.mouseY - view.vh / 2;
+    const angle = Math.atan2(mouseDy, mouseDx);
     return { angle, direction: { x: Math.cos(angle), y: Math.sin(angle) } };
   };
 
