@@ -21,8 +21,8 @@ type AuthContextValue = {
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: () => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<boolean>;
-  completeIdentity: (input: IdentityInput) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<string | null>;
+  completeIdentity: (input: IdentityInput, accountIdOverride?: string | null) => Promise<void>;
   signOut: () => void;
   resetError: () => void;
 };
@@ -102,16 +102,16 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     setStatus('needsIdentity');
   };
 
-  const signUpWithEmail = async (email: string, password: string): Promise<boolean> => {
+  const signUpWithEmail = async (email: string, password: string): Promise<string | null> => {
     setError(null);
     const trimmedEmail = email.trim();
     if (!isEmail(trimmedEmail)) {
       setError('Email invalido');
-      return false;
+      return null;
     }
     if (password.trim().length < 4) {
       setError('Senha invalida');
-      return false;
+      return null;
     }
 
     try {
@@ -120,25 +120,27 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       setAccountId(response.account_id);
       setIdentity(null);
       setStatus('needsIdentity');
-      return true;
+      return response.account_id;
     } catch (err) {
       const resolved = resolveError(err);
       setError(resolved.message);
-      return false;
+      return null;
     }
   };
 
-  const completeIdentity = async (input: IdentityInput): Promise<void> => {
-    if (!accountId) {
+  const completeIdentity = async (input: IdentityInput, accountIdOverride?: string | null): Promise<void> => {
+    const resolvedAccountId = accountIdOverride ?? accountId;
+    if (!resolvedAccountId) {
       setError('Sessao invalida');
       return;
     }
 
     setError(null);
     try {
-      const profile = await upsertIdentity(accountId, input);
+      const profile = await upsertIdentity(resolvedAccountId, input);
       setIdentity(profile);
       setStatus('signedIn');
+      setAccountId(resolvedAccountId);
     } catch (err) {
       const resolved = resolveError(err);
       setError(resolved.message);

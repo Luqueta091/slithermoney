@@ -262,16 +262,19 @@ export function HomeScreen(): JSX.Element {
               onSubmit={() =>
                 (async () => {
                   auth.resetError();
-                  const ok = await auth.signUpWithEmail(email, password);
-                  if (!ok) {
+                  const createdAccountId = await auth.signUpWithEmail(email, password);
+                  if (!createdAccountId) {
                     return;
                   }
-                  await auth.completeIdentity({
-                    fullName: fullName.trim(),
-                    cpf: sanitizeCpf(cpf),
-                    pixKey: pixKey.trim(),
-                    pixKeyType,
-                  });
+                  await auth.completeIdentity(
+                    {
+                      fullName: fullName.trim(),
+                      cpf: sanitizeCpf(cpf),
+                      pixKey: pixKey.trim(),
+                      pixKeyType,
+                    },
+                    createdAccountId,
+                  );
                 })()
               }
               onSwitchToLogin={() => {
