@@ -19,6 +19,10 @@ type IdentityScreenProps = {
   pixKey: string;
   pixKeyType: PixKeyType;
   termsAccepted: boolean;
+  email?: string;
+  password?: string;
+  onEmailChange?: (value: string) => void;
+  onPasswordChange?: (value: string) => void;
   onTermsChange: (value: boolean) => void;
   onFullNameChange: (value: string) => void;
   onCpfChange: (value: string) => void;
@@ -38,6 +42,10 @@ export function IdentityScreen({
   pixKey,
   pixKeyType,
   termsAccepted,
+  email,
+  password,
+  onEmailChange,
+  onPasswordChange,
   onTermsChange,
   onFullNameChange,
   onCpfChange,
@@ -64,6 +72,24 @@ export function IdentityScreen({
       </div>
 
       <div className="card">
+        {onEmailChange ? (
+          <InputField
+            label="Email"
+            value={email ?? ''}
+            onChange={onEmailChange}
+            placeholder="voce@email.com"
+            type="email"
+          />
+        ) : null}
+        {onPasswordChange ? (
+          <InputField
+            label="Senha"
+            value={password ?? ''}
+            onChange={onPasswordChange}
+            placeholder="••••••••"
+            type="password"
+          />
+        ) : null}
         <InputField
           label="Nome completo"
           value={fullName}

@@ -6,9 +6,16 @@ import {
   type IdentityProfile,
   upsertIdentity,
 } from '../api/client';
-import { clearSession, loadSession, saveSession } from '../storage/session';
+import {
+  clearSession,
+  loadPasswordHash,
+  loadSession,
+  savePasswordHash,
+  saveSession,
+} from '../storage/session';
 import { generateAccountId, generateAccountIdFromEmail } from '../utils/uuid';
 import { isEmail } from '../utils/validation';
+import { hashPassword } from '../utils/password';
 
 type AuthStatus = 'loading' | 'signedOut' | 'needsIdentity' | 'signedIn';
 
@@ -19,6 +26,7 @@ type AuthContextValue = {
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: () => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<boolean>;
   completeIdentity: (input: IdentityInput) => Promise<void>;
   signOut: () => void;
   resetError: () => void;
@@ -80,6 +88,16 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     }
 
     const derivedId = generateAccountIdFromEmail(trimmedEmail);
+    const storedHash = loadPasswordHash(derivedId);
+    if (!storedHash) {
+      setError('Conta sem senha. Cadastre novamente.');
+      return;
+    }
+    const incomingHash = await hashPassword(password);
+    if (incomingHash !== storedHash) {
+      setError('Senha incorreta');
+      return;
+    }
     saveSession(derivedId);
     setAccountId(derivedId);
     await refreshIdentity(derivedId);
@@ -92,6 +110,28 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     setAccountId(newId);
     setIdentity(null);
     setStatus('needsIdentity');
+  };
+
+  const signUpWithEmail = async (email: string, password: string): Promise<boolean> => {
+    setError(null);
+    const trimmedEmail = email.trim();
+    if (!isEmail(trimmedEmail)) {
+      setError('Email invalido');
+      return false;
+    }
+    if (password.trim().length < 4) {
+      setError('Senha invalida');
+      return false;
+    }
+
+    const derivedId = generateAccountIdFromEmail(trimmedEmail);
+    const passwordHash = await hashPassword(password);
+    saveSession(derivedId);
+    savePasswordHash(derivedId, passwordHash);
+    setAccountId(derivedId);
+    setIdentity(null);
+    setStatus('needsIdentity');
+    return true;
   };
 
   const completeIdentity = async (input: IdentityInput): Promise<void> => {
@@ -131,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         error,
         signIn,
         signUp,
+        signUpWithEmail,
         completeIdentity,
         signOut,
         resetError,

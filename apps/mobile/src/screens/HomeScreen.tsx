@@ -226,6 +226,16 @@ export function HomeScreen(): JSX.Element {
           {authMode === 'signup' ? (
             <IdentityScreen
               accountId={accountId}
+              email={email}
+              password={password}
+              onEmailChange={(value) => {
+                auth.resetError();
+                setEmail(value);
+              }}
+              onPasswordChange={(value) => {
+                auth.resetError();
+                setPassword(value);
+              }}
               fullName={fullName}
               cpf={cpf}
               pixKey={pixKey}
@@ -252,12 +262,19 @@ export function HomeScreen(): JSX.Element {
                 setPixKeyType(value);
               }}
               onSubmit={() =>
-                auth.completeIdentity({
-                  fullName: fullName.trim(),
-                  cpf: sanitizeCpf(cpf),
-                  pixKey: pixKey.trim(),
-                  pixKeyType,
-                })
+                (async () => {
+                  auth.resetError();
+                  const ok = await auth.signUpWithEmail(email, password);
+                  if (!ok) {
+                    return;
+                  }
+                  await auth.completeIdentity({
+                    fullName: fullName.trim(),
+                    cpf: sanitizeCpf(cpf),
+                    pixKey: pixKey.trim(),
+                    pixKeyType,
+                  });
+                })()
               }
               onSwitchToLogin={() => {
                 auth.resetError();
@@ -311,7 +328,6 @@ export function HomeScreen(): JSX.Element {
                   onClick={() => {
                     auth.resetError();
                     setAuthMode('signup');
-                    auth.signUp();
                   }}
                   variant="ghost"
                 />
