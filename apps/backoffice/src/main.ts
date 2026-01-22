@@ -6,7 +6,11 @@ import { handleDashboard } from './modules/dashboard/controllers/dashboard.contr
 import { handleUserLookup } from './modules/users/controllers/users.controller';
 import { handleBanUser, handleUnbanUser } from './modules/users/controllers/user-admin.controller';
 import { handlePixTransactions } from './modules/pix/controllers/pix.controller';
-import { handlePixReprocess } from './modules/pix/controllers/pix-admin.controller';
+import {
+  handlePixReprocess,
+  handlePixWithdrawalApprove,
+  handlePixWithdrawalReject,
+} from './modules/pix/controllers/pix-admin.controller';
 import { handleLedgerStatement } from './modules/ledger/controllers/ledger.controller';
 import { handleWalletAdjust } from './modules/ledger/controllers/ledger-adjust.controller';
 import { handleRuns } from './modules/runs/controllers/runs.controller';
@@ -36,6 +40,8 @@ const routes: Record<string, Handler> = {
   'POST /users/unban': handleUnbanUser,
   'GET /pix/transactions': handlePixTransactions,
   'POST /pix/transactions/reprocess': handlePixReprocess,
+  'POST /pix/withdrawals/approve': handlePixWithdrawalApprove,
+  'POST /pix/withdrawals/reject': handlePixWithdrawalReject,
   'GET /ledger': handleLedgerStatement,
   'POST /wallet/adjust': handleWalletAdjust,
   'GET /runs': handleRuns,

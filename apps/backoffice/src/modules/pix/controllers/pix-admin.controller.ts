@@ -15,6 +15,11 @@ type PixReprocessRequest = {
   metadata?: Record<string, unknown> | null;
 };
 
+type PixWithdrawalDecisionRequest = {
+  transaction_id: string;
+  reason?: string;
+};
+
 export async function handlePixReprocess(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const auth = requireBackofficeAuth(req, 'write');
   const body = await readJson<PixReprocessRequest>(req);
@@ -90,6 +95,120 @@ export async function handlePixReprocess(req: IncomingMessage, res: ServerRespon
     amount_cents: result.transaction.amountCents.toString(),
     currency: result.transaction.currency,
     updated: result.repaired,
+  });
+}
+
+export async function handlePixWithdrawalApprove(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const auth = requireBackofficeAuth(req, 'write');
+  const body = await readJson<PixWithdrawalDecisionRequest>(req);
+  const transactionId = body.transaction_id;
+
+  if (!transactionId || !isUuid(transactionId)) {
+    throw new HttpError(400, 'invalid_transaction_id', 'transaction_id invalido');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const transaction = await tx.pixTransaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!transaction) {
+      throw new HttpError(404, 'pix_transaction_not_found', 'Transacao Pix nao encontrada');
+    }
+
+    if (transaction.txType !== 'WITHDRAWAL') {
+      throw new HttpError(409, 'pix_transaction_invalid', 'Transacao Pix invalida');
+    }
+
+    const updated = await resolveWithdrawal(tx, transaction, 'APPROVE', {
+      transaction_id: transactionId,
+      reason: body.reason,
+    });
+
+    await recordAuditLog(tx, {
+      action: 'backoffice.pix.withdrawal_approve',
+      actorUserId: auth.userId,
+      actorRole: auth.role,
+      targetType: 'pix_transaction',
+      targetId: transaction.id,
+      beforeData: updated.before,
+      afterData: updated.after,
+      metadata: {
+        reason: body.reason,
+      },
+    });
+
+    return updated;
+  });
+
+  sendJson(res, 200, {
+    id: result.transaction.id,
+    account_id: result.transaction.accountId,
+    tx_type: result.transaction.txType,
+    status: result.transaction.status,
+    amount_cents: result.transaction.amountCents.toString(),
+    currency: result.transaction.currency,
+    updated: result.updated,
+  });
+}
+
+export async function handlePixWithdrawalReject(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const auth = requireBackofficeAuth(req, 'write');
+  const body = await readJson<PixWithdrawalDecisionRequest>(req);
+  const transactionId = body.transaction_id;
+
+  if (!transactionId || !isUuid(transactionId)) {
+    throw new HttpError(400, 'invalid_transaction_id', 'transaction_id invalido');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const transaction = await tx.pixTransaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!transaction) {
+      throw new HttpError(404, 'pix_transaction_not_found', 'Transacao Pix nao encontrada');
+    }
+
+    if (transaction.txType !== 'WITHDRAWAL') {
+      throw new HttpError(409, 'pix_transaction_invalid', 'Transacao Pix invalida');
+    }
+
+    const updated = await resolveWithdrawal(tx, transaction, 'MARK_FAILED', {
+      transaction_id: transactionId,
+      reason: body.reason,
+    });
+
+    await recordAuditLog(tx, {
+      action: 'backoffice.pix.withdrawal_reject',
+      actorUserId: auth.userId,
+      actorRole: auth.role,
+      targetType: 'pix_transaction',
+      targetId: transaction.id,
+      beforeData: updated.before,
+      afterData: updated.after,
+      metadata: {
+        reason: body.reason,
+      },
+    });
+
+    return updated;
+  });
+
+  sendJson(res, 200, {
+    id: result.transaction.id,
+    account_id: result.transaction.accountId,
+    tx_type: result.transaction.txType,
+    status: result.transaction.status,
+    amount_cents: result.transaction.amountCents.toString(),
+    currency: result.transaction.currency,
+    updated: result.updated,
   });
 }
 
