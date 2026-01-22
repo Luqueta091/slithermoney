@@ -97,6 +97,22 @@ export type RunStartResponse = {
   created_at: string;
 };
 
+export type RunCashoutEventResponse = {
+  run_id: string;
+  status: string;
+  payout_cents: string;
+  house_fee_cents: string;
+  multiplier: number;
+  ended_at: string | null;
+};
+
+export type RunEliminatedEventResponse = {
+  run_id: string;
+  status: string;
+  result_reason: string | null;
+  ended_at: string | null;
+};
+
 export type LedgerEntry = {
   id: string;
   entry_type: string;
@@ -225,6 +241,40 @@ export async function startRun(
     },
     accountId,
   );
+}
+
+export async function reportRunCashout(input: {
+  runId: string;
+  multiplier: number;
+  sizeScore?: number;
+}): Promise<RunCashoutEventResponse> {
+  return apiRequest<RunCashoutEventResponse>('/runs/events/cashout', {
+    method: 'POST',
+    body: JSON.stringify({
+      runId: input.runId,
+      eventVersion: 1,
+      multiplier: input.multiplier,
+      sizeScore: input.sizeScore,
+    }),
+  });
+}
+
+export async function reportRunEliminated(input: {
+  runId: string;
+  reason: string;
+  multiplier?: number;
+  sizeScore?: number;
+}): Promise<RunEliminatedEventResponse> {
+  return apiRequest<RunEliminatedEventResponse>('/runs/events/eliminated', {
+    method: 'POST',
+    body: JSON.stringify({
+      runId: input.runId,
+      eventVersion: 1,
+      reason: input.reason,
+      multiplier: input.multiplier,
+      sizeScore: input.sizeScore,
+    }),
+  });
 }
 
 export async function listLedger(

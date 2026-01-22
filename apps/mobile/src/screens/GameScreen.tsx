@@ -13,7 +13,12 @@ import {
 import { resolveMultiplier } from '../../../game-server/src/modules/realtime/multiplier';
 import { ActionButton } from '../components/ActionButton';
 import { RunResultOverlay } from '../components/RunResultOverlay';
-import { type RunStartResponse } from '../api/client';
+import {
+  type RunCashoutEventResponse,
+  type RunStartResponse,
+  reportRunCashout,
+  reportRunEliminated,
+} from '../api/client';
 import { formatCents } from '../utils/format';
 
 type GameScreenProps = {
@@ -420,6 +425,19 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     overlayOpenRef.current = true;
     setOverlayOpen(true);
     setCashoutPending(false);
+    if (OFFLINE_MODE && runIdRef.current) {
+      void reportRunEliminated({
+        runId: runIdRef.current,
+        reason: data?.reason ?? 'eliminated',
+        multiplier:
+          resolveOptionalNumber(extended?.multiplier) ??
+          lastKnownMultiplierRef.current ??
+          undefined,
+        sizeScore: resolveOptionalNumber(extended?.size_score) ?? lastKnownLengthRef.current ?? undefined,
+      }).catch(() => {
+        setCashoutResult('Falha ao registrar eliminacao');
+      });
+    }
   };
 
   const handleSnapshot = (snapshot: SnapshotPayload): void => {
@@ -719,7 +737,38 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     overlayOpenRef.current = true;
     setOverlayOpen(true);
     setStatus('ended');
-    setCashoutPending(false);
+    const canReportCashout = OFFLINE_MODE && !!runIdRef.current && fallbackMultiplier !== null;
+    setCashoutPending(canReportCashout);
+    if (canReportCashout) {
+      void reportRunCashout({
+        runId: runIdRef.current,
+        multiplier: fallbackMultiplier,
+        sizeScore: fallbackLength ?? undefined,
+      })
+        .then((response: RunCashoutEventResponse) => {
+          const payout =
+            response?.payout_cents != null ? Number.parseInt(response.payout_cents, 10) : null;
+          setRunResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  payout: payout ?? prev.payout ?? null,
+                  multiplier:
+                    typeof response?.multiplier === 'number'
+                      ? response.multiplier
+                      : prev.multiplier,
+                }
+              : prev,
+          );
+          setCashoutResult('Cashout confirmado');
+        })
+        .catch(() => {
+          setCashoutResult('Falha ao confirmar cashout');
+        })
+        .finally(() => {
+          setCashoutPending(false);
+        });
+    }
     stopCashoutCountdown();
   };
 
