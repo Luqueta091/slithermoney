@@ -2,20 +2,15 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from '
 import {
   ApiError,
   getIdentity,
+  login,
+  signup,
   type IdentityInput,
   type IdentityProfile,
   upsertIdentity,
 } from '../api/client';
-import {
-  clearSession,
-  loadPasswordHash,
-  loadSession,
-  savePasswordHash,
-  saveSession,
-} from '../storage/session';
-import { generateAccountId, generateAccountIdFromEmail } from '../utils/uuid';
+import { clearSession, loadSession, saveSession } from '../storage/session';
+import { generateAccountId } from '../utils/uuid';
 import { isEmail } from '../utils/validation';
-import { hashPassword } from '../utils/password';
 
 type AuthStatus = 'loading' | 'signedOut' | 'needsIdentity' | 'signedIn';
 
@@ -87,20 +82,15 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       return;
     }
 
-    const derivedId = generateAccountIdFromEmail(trimmedEmail);
-    const storedHash = loadPasswordHash(derivedId);
-    if (!storedHash) {
-      setError('Conta sem senha. Cadastre novamente.');
-      return;
+    try {
+      const response = await login(trimmedEmail, password);
+      saveSession(response.account_id);
+      setAccountId(response.account_id);
+      await refreshIdentity(response.account_id);
+    } catch (err) {
+      const resolved = resolveError(err);
+      setError(resolved.message);
     }
-    const incomingHash = await hashPassword(password);
-    if (incomingHash !== storedHash) {
-      setError('Senha incorreta');
-      return;
-    }
-    saveSession(derivedId);
-    setAccountId(derivedId);
-    await refreshIdentity(derivedId);
   };
 
   const signUp = async (): Promise<void> => {
@@ -124,14 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       return false;
     }
 
-    const derivedId = generateAccountIdFromEmail(trimmedEmail);
-    const passwordHash = await hashPassword(password);
-    saveSession(derivedId);
-    savePasswordHash(derivedId, passwordHash);
-    setAccountId(derivedId);
-    setIdentity(null);
-    setStatus('needsIdentity');
-    return true;
+    try {
+      const response = await signup(trimmedEmail, password);
+      saveSession(response.account_id);
+      setAccountId(response.account_id);
+      setIdentity(null);
+      setStatus('needsIdentity');
+      return true;
+    } catch (err) {
+      const resolved = resolveError(err);
+      setError(resolved.message);
+      return false;
+    }
   };
 
   const completeIdentity = async (input: IdentityInput): Promise<void> => {

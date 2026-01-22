@@ -165,8 +165,26 @@ export type PixWithdrawalResponse = {
   created_at: string;
 };
 
+export type AuthResponse = {
+  account_id: string;
+};
+
 export async function getIdentity(accountId: string): Promise<IdentityProfile> {
   return apiRequest<IdentityProfile>('/identity/me', { method: 'GET' }, accountId);
+}
+
+export async function signup(email: string, password: string): Promise<AuthResponse> {
+  return apiRequest<AuthResponse>('/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  return apiRequest<AuthResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 export async function upsertIdentity(

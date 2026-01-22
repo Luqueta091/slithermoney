@@ -14,6 +14,7 @@ import { handleStartRun } from '../../modules/runs/controllers/runs.controller';
 import { handleRunCashout, handleRunEliminated } from '../../modules/runs/controllers/run-events.controller';
 import { handleRunsMe } from '../../modules/runs/controllers/runs-list.controller';
 import { handleListStakes } from '../../modules/stakes/controllers/stakes.controller';
+import { handleAuthLogin, handleAuthSignup } from '../../modules/auth/controllers/auth.controller';
 import { isHttpError, HttpError } from './http-error';
 import { withRequestContext } from './request-context';
 import { enforceRateLimit, getRateLimitIdentifier } from './rate-limit';
@@ -45,6 +46,8 @@ const routes: Record<string, Handler> = {
       metrics: metrics.snapshot(),
     });
   },
+  'POST /auth/signup': handleAuthSignup,
+  'POST /auth/login': handleAuthLogin,
   'POST /identity': handleUpsertIdentity,
   'GET /identity/me': handleGetIdentityMe,
   'GET /wallet/me': handleGetWalletMe,
