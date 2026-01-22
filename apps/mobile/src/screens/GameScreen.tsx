@@ -722,8 +722,8 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
         direction: cashoutHoldRef.current.direction,
       };
     }
-    if (isMobile) {
-      const { active, dx, dy } = joystickStateRef.current;
+    const { active, dx, dy } = joystickStateRef.current;
+    if (isMobile || active) {
       if (!active) {
         const angle = inputRef.current.lastSent.angle;
         return { angle, direction: { x: Math.cos(angle), y: Math.sin(angle) } };
@@ -885,17 +885,26 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       if (overlayOpenRef.current) {
         return;
       }
+      if (event.pointerType === 'touch') {
+        return;
+      }
       inputRef.current.mouseX = event.clientX;
       inputRef.current.mouseY = event.clientY;
     };
-    const handlePointerDown = () => {
+    const handlePointerDown = (event: PointerEvent) => {
       if (overlayOpenRef.current || cashoutHoldRef.current.active) {
+        return;
+      }
+      if (event.pointerType === 'touch') {
         return;
       }
       inputRef.current.boost = true;
     };
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: PointerEvent) => {
       if (overlayOpenRef.current || cashoutHoldRef.current.active) {
+        return;
+      }
+      if (event.pointerType === 'touch') {
         return;
       }
       inputRef.current.boost = false;
