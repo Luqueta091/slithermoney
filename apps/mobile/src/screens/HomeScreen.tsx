@@ -47,7 +47,6 @@ export function HomeScreen(): JSX.Element {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
-  const [identityPrompted, setIdentityPrompted] = useState(false);
 
   useEffect(() => {
     void loadInitialData();
@@ -101,14 +100,13 @@ export function HomeScreen(): JSX.Element {
   useEffect(() => {
     if (signedIn) {
       setAuthOpen(false);
-      setIdentityPrompted(false);
+      return;
     }
-    if (needsIdentity && !identityPrompted) {
+    if (needsIdentity) {
       setAuthOpen(true);
       setAuthMode('signup');
-      setIdentityPrompted(true);
     }
-  }, [signedIn, needsIdentity, identityPrompted]);
+  }, [signedIn, needsIdentity]);
 
   const loadInitialData = async (): Promise<void> => {
     try {
