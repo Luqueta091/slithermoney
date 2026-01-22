@@ -302,6 +302,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     startInputLoop();
 
     const interval = window.setInterval(() => {
+      if (statusRef.current !== 'playing') {
+        return;
+      }
       const dt = 1 / engine.tickRate;
       const { eliminations } = engine.update(dt);
       offlineTickCountRef.current += 1;
@@ -398,6 +401,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   };
 
   const applyElimination = (data: EliminatedPayload): void => {
+    if (statusRef.current !== 'playing') {
+      return;
+    }
     const extended = data as EliminatedPayloadExtended;
     setEliminationReason(data?.reason ?? 'eliminated');
     setStatus('ended');
@@ -685,6 +691,8 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
           false,
         );
       }
+      stopInputLoop();
+      stopOffline();
       setCashoutHold(null);
       stopCashoutCountdown();
     } else {
@@ -711,7 +719,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     overlayOpenRef.current = true;
     setOverlayOpen(true);
     setStatus('ended');
-    setCashoutPending(!OFFLINE_MODE);
+    setCashoutPending(false);
     stopCashoutCountdown();
   };
 
