@@ -12,10 +12,28 @@ const setupSteps = [
 ];
 
 const services = [
-  { name: 'api', args: ['-w', 'apps/api', 'run', 'dev'] },
-  { name: 'game-server', args: ['-w', 'apps/game-server', 'run', 'dev'] },
-  { name: 'worker', args: ['-w', 'apps/worker', 'run', 'dev'] },
-  { name: 'mobile', args: ['-w', 'apps/mobile', 'run', 'dev'] },
+  {
+    name: 'api',
+    args: ['-w', 'apps/api', 'run', 'dev'],
+    env: () => ({
+      PORT: process.env.API_PORT ?? process.env.PORT ?? '3000',
+    }),
+  },
+  {
+    name: 'game-server',
+    args: ['-w', 'apps/game-server', 'run', 'dev'],
+    env: () => ({
+      PORT: process.env.GAME_SERVER_PORT ?? '4000',
+    }),
+  },
+  {
+    name: 'worker',
+    args: ['-w', 'apps/worker', 'run', 'dev'],
+    env: () => ({
+      PORT: process.env.WORKER_PORT ?? '7000',
+    }),
+  },
+  { name: 'mobile', args: ['-w', 'apps/mobile', 'run', 'dev'], env: () => ({}) },
 ];
 
 async function runStep(step) {
@@ -32,7 +50,11 @@ async function runStep(step) {
 }
 
 function startService(service) {
-  const child = spawn(npmCmd, service.args, { stdio: 'inherit', env: process.env });
+  const childEnv = {
+    ...process.env,
+    ...service.env(),
+  };
+  const child = spawn(npmCmd, service.args, { stdio: 'inherit', env: childEnv });
   processes.set(service.name, child);
 
   child.on('exit', (code) => {
