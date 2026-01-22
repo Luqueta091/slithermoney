@@ -59,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const resolved = resolveError(err);
       if (resolved.code === 'identity_not_found') {
         setIdentity(null);
+        setError('Complete seu cadastro para continuar.');
         setStatus('needsIdentity');
         return;
       }
