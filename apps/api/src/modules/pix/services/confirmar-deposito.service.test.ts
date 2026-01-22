@@ -58,12 +58,16 @@ describeDb('pix confirmar deposito service', () => {
       txid,
       amountCents: 2500,
       currency: transaction.currency,
+      externalId: undefined,
+      e2eId: undefined,
     });
 
     await confirmarDeposito.confirm({
       txid,
       amountCents: 2500,
       currency: transaction.currency,
+      externalId: undefined,
+      e2eId: undefined,
     });
 
     const wallet = await prisma.wallet.findUnique({
