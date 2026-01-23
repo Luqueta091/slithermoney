@@ -218,7 +218,11 @@ export class ConfirmarDepositoService {
         tx,
       );
 
-      return mapPixTransaction(updated ?? transaction);
+      if (updated) {
+        return mapPixTransaction(updated);
+      }
+
+      return normalizeRecord(transaction);
     });
 
     return result;
@@ -245,6 +249,17 @@ function mapPixTransaction(entry: PixTransaction): PixTransactionRecord {
     payload: entry.payload ?? null,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    completedAt: entry.completedAt ?? null,
+  };
+}
+
+function normalizeRecord(entry: PixTransactionRecord): PixTransactionRecord {
+  return {
+    ...entry,
+    externalReference: entry.externalReference ?? null,
+    payload: entry.payload ?? null,
+    e2eId: entry.e2eId ?? null,
+    txid: entry.txid ?? null,
     completedAt: entry.completedAt ?? null,
   };
 }
