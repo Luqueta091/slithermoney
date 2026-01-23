@@ -5,6 +5,7 @@ import { HttpError } from '../../../shared/http/http-error';
 import { recordPixWithdrawalRequested } from '../../../shared/observability/metrics';
 import { CarteirasRepository } from '../../carteiras/repository/carteiras.repository';
 import { LedgerService } from '../../ledger/services/ledger.service';
+import { parsePixKey, type PixKeyType } from '../../identidade/domain/value-objects/pix-key.vo';
 import { SolicitarSaqueInput } from '../dtos/solicitar-saque.dto';
 import { PixTransacoesRepository, PixTransactionRecord } from '../repository/pix-transacoes.repository';
 
@@ -25,10 +26,12 @@ export class SolicitarSaqueService {
     const amount = BigInt(amountCents);
     const currency = normalizeCurrency(input.currency);
     const resolvedKey = idempotencyKey ?? randomUUID();
+    const pixKeyType = input.pixKeyType as PixKeyType;
+    const pixKey = parsePixKey(input.pixKey, pixKeyType);
 
     const existing = await this.pixRepository.findByIdempotencyKey(resolvedKey);
     if (existing) {
-      assertSameRequest(existing, accountId, amount, currency);
+      assertSameRequest(existing, accountId, amount, currency, pixKey, pixKeyType);
       return { transaction: existing, idempotencyKey: resolvedKey };
     }
 
@@ -55,6 +58,10 @@ export class SolicitarSaqueService {
             amountCents: amount,
             currency,
             idempotencyKey: resolvedKey,
+            payload: {
+              pix_key: pixKey,
+              pix_key_type: pixKeyType,
+            },
           },
           tx,
         );
@@ -86,7 +93,7 @@ export class SolicitarSaqueService {
       if (isUniqueConstraintError(error)) {
         const existingAfter = await this.pixRepository.findByIdempotencyKey(resolvedKey);
         if (existingAfter) {
-          assertSameRequest(existingAfter, accountId, amount, currency);
+          assertSameRequest(existingAfter, accountId, amount, currency, pixKey, pixKeyType);
           return { transaction: existingAfter, idempotencyKey: resolvedKey };
         }
       }
@@ -113,6 +120,8 @@ function assertSameRequest(
   accountId: string,
   amountCents: bigint,
   currency: string,
+  pixKey: string,
+  pixKeyType: PixKeyType,
 ): void {
   if (existing.accountId !== accountId) {
     throw new HttpError(409, 'idempotency_conflict', 'Chave de idempotencia ja usada');
@@ -123,6 +132,14 @@ function assertSameRequest(
   }
 
   if (existing.amountCents !== amountCents || existing.currency !== currency) {
+    throw new HttpError(409, 'idempotency_conflict', 'Chave de idempotencia com payload diferente');
+  }
+
+  const payload = (existing.payload ?? {}) as { pix_key?: string; pix_key_type?: string };
+  if (payload.pix_key && payload.pix_key !== pixKey) {
+    throw new HttpError(409, 'idempotency_conflict', 'Chave de idempotencia com payload diferente');
+  }
+  if (payload.pix_key_type && payload.pix_key_type !== pixKeyType) {
     throw new HttpError(409, 'idempotency_conflict', 'Chave de idempotencia com payload diferente');
   }
 }

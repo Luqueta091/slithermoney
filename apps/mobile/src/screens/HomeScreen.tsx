@@ -9,7 +9,8 @@ import { HistoryScreen } from './HistoryScreen';
 import { GameScreen } from './GameScreen';
 import { useAuth } from '../context/auth';
 import { InputField } from '../components/InputField';
-import { IdentityScreen, type PixKeyType } from './IdentityScreen';
+import { IdentityScreen } from './IdentityScreen';
+import { type PixKeyType } from '../utils/pixKey';
 import { sanitizeCpf } from '../utils/validation';
 
 const TABS = [
@@ -108,6 +109,18 @@ export function HomeScreen(): JSX.Element {
     }
   }, [signedIn, needsIdentity]);
 
+  useEffect(() => {
+    if (!identity) {
+      return;
+    }
+    if (!pixKey) {
+      setPixKey(identity.pix_key ?? '');
+      if (identity.pix_key_type) {
+        setPixKeyType(identity.pix_key_type as PixKeyType);
+      }
+    }
+  }, [identity, pixKey, pixKeyType]);
+
   const loadInitialData = async (): Promise<void> => {
     try {
       const stakesResult = await listStakes();
@@ -196,7 +209,14 @@ export function HomeScreen(): JSX.Element {
         content = <DepositScreen accountId={accountId} onConfirmed={refreshWallet} />;
         break;
       case 'withdraw':
-        content = <WithdrawScreen accountId={accountId} onUpdated={refreshWallet} />;
+        content = (
+          <WithdrawScreen
+            accountId={accountId}
+            onUpdated={refreshWallet}
+            pixKey={pixKey}
+            pixKeyType={pixKeyType}
+          />
+        );
         break;
       case 'history':
         content = <HistoryScreen accountId={accountId} />;

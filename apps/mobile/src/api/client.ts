@@ -337,12 +337,17 @@ export async function listPixTransactions(
 export async function requestWithdrawal(
   accountId: string,
   amountCents: number,
+  input: { pixKey: string; pixKeyType: 'cpf' | 'phone' | 'email' | 'random' },
 ): Promise<PixWithdrawalResponse> {
   return apiRequest<PixWithdrawalResponse>(
     '/pix/withdrawals',
     {
       method: 'POST',
-      body: JSON.stringify({ amountCents }),
+      body: JSON.stringify({
+        amountCents,
+        pixKey: input.pixKey,
+        pixKeyType: input.pixKeyType,
+      }),
     },
     accountId,
   );

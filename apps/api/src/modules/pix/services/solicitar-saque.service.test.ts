@@ -50,13 +50,13 @@ describeDb('pix solicitar saque service', () => {
 
     const first = await service.requestWithdrawal(
       accountId,
-      { amountCents: 2000 },
+      { amountCents: 2000, pixKey: 'email@exemplo.com', pixKeyType: 'email' },
       idempotencyKey,
     );
 
     const second = await service.requestWithdrawal(
       accountId,
-      { amountCents: 2000 },
+      { amountCents: 2000, pixKey: 'email@exemplo.com', pixKeyType: 'email' },
       idempotencyKey,
     );
 

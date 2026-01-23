@@ -11,7 +11,8 @@ import { AuthProvider, useAuth } from './src/context/auth';
 import { LoadingScreen } from './src/screens/LoadingScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
-import { IdentityScreen, type PixKeyType } from './src/screens/IdentityScreen';
+import { IdentityScreen } from './src/screens/IdentityScreen';
+import { type PixKeyType } from './src/utils/pixKey';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 import { sanitizeCpf } from './src/utils/validation';
 

@@ -4,6 +4,8 @@ import { PixTransactionStatus } from './criar-cobranca.dto';
 export const solicitarSaqueInputSchema = z.object({
   amountCents: z.number().int().positive(),
   currency: z.string().length(3).optional(),
+  pixKey: z.string().min(3),
+  pixKeyType: z.enum(['cpf', 'phone', 'email', 'random']),
 });
 
 export type SolicitarSaqueInput = z.infer<typeof solicitarSaqueInputSchema>;
