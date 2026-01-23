@@ -146,7 +146,6 @@ export function WithdrawScreen({
           <div className="card__value">{status ?? '-'}</div>
           <div className="card__label">Valor</div>
           <div className="card__value">{formatCents(requestedCents ?? 0)}</div>
-          <div className="form-helper">O worker precisa estar rodando para concluir o saque.</div>
         </div>
       ) : null}
     </div>

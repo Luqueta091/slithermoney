@@ -23,11 +23,14 @@ export class SolicitarSaqueService {
     idempotencyKey?: string,
   ): Promise<{ transaction: PixTransactionRecord; idempotencyKey: string }> {
     const amountCents = assertPositiveAmount(input.amountCents);
+    assertMinimumWithdrawal(amountCents);
     const amount = BigInt(amountCents);
     const currency = normalizeCurrency(input.currency);
     const resolvedKey = idempotencyKey ?? randomUUID();
     const pixKeyType = input.pixKeyType as PixKeyType;
     const pixKey = parsePixKey(input.pixKey, pixKeyType);
+
+    await assertRolloverSatisfied(this.prisma, accountId, amountCents);
 
     const existing = await this.pixRepository.findByIdempotencyKey(resolvedKey);
     if (existing) {
@@ -111,6 +114,14 @@ function assertPositiveAmount(amountCents: number): number {
   return amountCents;
 }
 
+const MIN_WITHDRAWAL_CENTS = 1000;
+
+function assertMinimumWithdrawal(amountCents: number): void {
+  if (amountCents < MIN_WITHDRAWAL_CENTS) {
+    throw new ValidationError('Saque minimo de R$ 10,00');
+  }
+}
+
 function normalizeCurrency(currency?: string): string {
   return (currency ?? 'BRL').trim().toUpperCase();
 }
@@ -146,4 +157,47 @@ function assertSameRequest(
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+async function assertRolloverSatisfied(
+  prisma: PrismaClient,
+  accountId: string,
+  amountCents: number,
+): Promise<void> {
+  const lastWithdrawal = await prisma.pixTransaction.findFirst({
+    where: {
+      accountId,
+      txType: 'WITHDRAWAL',
+      status: 'PAID',
+    },
+    orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
+    select: {
+      completedAt: true,
+      createdAt: true,
+    },
+  });
+
+  const since = lastWithdrawal?.completedAt ?? lastWithdrawal?.createdAt ?? null;
+  const wagered = await prisma.run.aggregate({
+    where: {
+      accountId,
+      ...(since ? { createdAt: { gt: since } } : {}),
+    },
+    _sum: {
+      stakeCents: true,
+    },
+  });
+
+  const wageredCents = Number(wagered._sum.stakeCents ?? 0n);
+  if (wageredCents < amountCents) {
+    const missing = amountCents - wageredCents;
+    throw new ValidationError(
+      `Rollover pendente: aposte mais ${formatCents(missing)} para liberar o saque`,
+    );
+  }
+}
+
+function formatCents(value: number): string {
+  const amount = (value / 100).toFixed(2).replace('.', ',');
+  return `R$ ${amount}`;
 }
