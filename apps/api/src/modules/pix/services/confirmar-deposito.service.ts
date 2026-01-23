@@ -25,10 +25,21 @@ export class ConfirmarDepositoService {
       throw new HttpError(404, 'pix_transaction_not_found', 'Transacao Pix nao encontrada');
     }
 
+    if (transaction.txType === 'WITHDRAWAL') {
+      return this.confirmWithdrawal(transaction, input);
+    }
+
     if (transaction.txType !== 'DEPOSIT') {
       throw new HttpError(409, 'pix_transaction_conflict', 'Transacao Pix invalida');
     }
 
+    return this.confirmDeposit(transaction, input);
+  }
+
+  private async confirmDeposit(
+    transaction: PixTransactionRecord,
+    input: PixWebhookInput,
+  ): Promise<PixTransactionRecord> {
     if (!['PENDING', 'CONFIRMED', 'FAILED'].includes(transaction.status)) {
       throw new HttpError(409, 'pix_transaction_conflict', 'Status Pix invalido');
     }
@@ -109,6 +120,106 @@ export class ConfirmarDepositoService {
     if (confirmationMs !== null) {
       recordPixDepositConfirmed(confirmationMs);
     }
+
+    return result;
+  }
+
+  private async confirmWithdrawal(
+    transaction: PixTransactionRecord,
+    input: PixWebhookInput,
+  ): Promise<PixTransactionRecord> {
+    if (!['REQUESTED', 'PAID', 'FAILED'].includes(transaction.status)) {
+      throw new HttpError(409, 'pix_transaction_conflict', 'Status Pix invalido');
+    }
+
+    if (transaction.status === 'PAID') {
+      return transaction;
+    }
+
+    const currency = normalizeCurrency(input.currency);
+    let amountCents = BigInt(input.amountCents);
+
+    if (transaction.amountCents !== amountCents && input.amountCents % 100 === 0) {
+      const maybeCents = BigInt(input.amountCents / 100);
+      if (transaction.amountCents === maybeCents) {
+        amountCents = maybeCents;
+      }
+    }
+
+    if (transaction.currency !== currency) {
+      throw new HttpError(409, 'pix_transaction_conflict', 'Moeda divergente');
+    }
+
+    if (transaction.amountCents !== amountCents) {
+      throw new HttpError(409, 'pix_transaction_conflict', 'Valor divergente');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.pixTransaction.updateMany({
+        where: { id: transaction.id, status: 'REQUESTED' },
+        data: {
+          status: 'PAID',
+          txid: transaction.txid ?? input.txid ?? null,
+          e2eId: transaction.e2eId ?? input.e2eId ?? null,
+          externalReference: transaction.externalReference ?? input.txid ?? null,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      if (updateResult.count === 0) {
+        const current = await tx.pixTransaction.findUnique({
+          where: { id: transaction.id },
+        });
+        if (!current) {
+          throw new HttpError(404, 'pix_transaction_not_found', 'Transacao Pix nao encontrada');
+        }
+        return mapPixTransaction(current);
+      }
+
+      const walletUpdated = await tx.wallet.updateMany({
+        where: {
+          accountId: transaction.accountId,
+          blockedBalanceCents: { gte: transaction.amountCents },
+        },
+        data: {
+          blockedBalanceCents: { decrement: transaction.amountCents },
+        },
+      });
+
+      if (walletUpdated.count === 0) {
+        throw new Error('Saldo bloqueado insuficiente');
+      }
+
+      const wallet = await tx.wallet.findUnique({
+        where: { accountId: transaction.accountId },
+      });
+
+      const updated = await tx.pixTransaction.findUnique({
+        where: { id: transaction.id },
+      });
+
+      await this.ledgerService.registerMovement(
+        {
+          accountId: transaction.accountId,
+          walletId: wallet?.id ?? null,
+          entryType: 'WITHDRAW_PAID',
+          direction: 'DEBIT',
+          amountCents: Number(transaction.amountCents),
+          currency: transaction.currency,
+          referenceType: 'PIX',
+          referenceId: transaction.id,
+          externalReference: input.txid ?? transaction.externalReference ?? null,
+          metadata: {
+            txid: input.txid ?? transaction.txid ?? null,
+            e2e_id: input.e2eId ?? transaction.e2eId ?? null,
+          },
+        },
+        tx,
+      );
+
+      return mapPixTransaction(updated ?? transaction);
+    });
 
     return result;
   }
