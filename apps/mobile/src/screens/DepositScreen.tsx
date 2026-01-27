@@ -19,6 +19,7 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
   const [isLoading, setIsLoading] = useState(false);
   const [qrImage, setQrImage] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  const presetValues = [10, 20, 50, 100];
 
   useEffect(() => {
     return () => stopPolling();
@@ -93,6 +94,11 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
       return;
     }
 
+    if (cents < 500) {
+      setError('Deposito minimo de R$ 5,00');
+      return;
+    }
+
     setError(null);
     setIsLoading(true);
     try {
@@ -134,6 +140,21 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
           placeholder="Ex: 20,00"
         />
       </label>
+      <div className="form-helper">Deposito minimo: R$ 5,00.</div>
+
+      <div className="actions" style={{ flexWrap: 'wrap' }}>
+        {presetValues.map((value) => (
+          <ActionButton
+            key={value}
+            label={`R$ ${value}`}
+            variant="ghost"
+            onClick={() => {
+              setError(null);
+              setAmount(value.toFixed(2).replace('.', ','));
+            }}
+          />
+        ))}
+      </div>
 
       <div className="actions">
         <ActionButton

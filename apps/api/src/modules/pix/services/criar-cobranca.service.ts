@@ -19,6 +19,7 @@ export class CriarCobrancaService {
     idempotencyKey?: string,
   ): Promise<{ transaction: PixTransactionRecord; idempotencyKey: string }> {
     const amountCents = assertPositiveAmount(input.amountCents);
+    assertMinimumDeposit(amountCents);
     const amount = BigInt(amountCents);
     const currency = normalizeCurrency(input.currency);
     const resolvedKey = idempotencyKey ?? randomUUID();
@@ -72,6 +73,14 @@ function assertPositiveAmount(amountCents: number): number {
   }
 
   return amountCents;
+}
+
+const MIN_DEPOSIT_CENTS = 500;
+
+function assertMinimumDeposit(amountCents: number): void {
+  if (amountCents < MIN_DEPOSIT_CENTS) {
+    throw new ValidationError('Deposito minimo de R$ 5,00');
+  }
 }
 
 function normalizeCurrency(currency?: string): string {
