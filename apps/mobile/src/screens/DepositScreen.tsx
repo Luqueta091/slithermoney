@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { ActionButton } from '../components/ActionButton';
 import { type PixDepositResponse, createDeposit, listPixTransactions } from '../api/client';
-import { formatCents, formatDate } from '../utils/format';
+import { formatCents } from '../utils/format';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -181,10 +181,6 @@ export function DepositScreen({ accountId, onConfirmed }: DepositScreenProps): J
           <div>
             <div className="card__label">Valor</div>
             <div className="card__value">{formatCents(transaction.amount_cents)}</div>
-          </div>
-          <div>
-            <div className="card__label">Expira em</div>
-            <div className="card__value">{formatDate(transaction.payload?.expires_at)}</div>
           </div>
           <div>
             <div className="card__label">Copia e cola</div>
