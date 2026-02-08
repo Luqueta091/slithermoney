@@ -38,6 +38,11 @@ type SnakeSnapshot = {
   p: number[] | null;
 };
 
+type SnakeSprite = {
+  canvas: HTMLCanvasElement;
+  size: number;
+};
+
 type SnakeEntry = {
   id: string;
   x: number;
@@ -148,6 +153,8 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const cashoutCountdownRef = useRef<number | null>(null);
 
   const gridPatternRef = useRef<CanvasPattern | null>(null);
+  const vignetteRef = useRef<HTMLCanvasElement | null>(null);
+  const snakeSpriteCacheRef = useRef<Map<string, SnakeSprite>>(new Map());
   const pelletSpritesRef = useRef<HTMLCanvasElement[]>([]);
   const lastLeaderboardRef = useRef(0);
 
@@ -231,9 +238,9 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     } else {
       connect(run);
     }
-    startRenderLoop();
     const cleanupResize = setupResizeObserver();
     const cleanupInput = setupInputHandlers();
+    startRenderLoop();
 
     return () => {
       cleanupInput();
@@ -296,7 +303,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
         join_token: data.join_token,
         protocol_version: REALTIME_PROTOCOL_VERSION,
       });
-      sendMessage('JOIN', { run_id: data.run_id, desired_skin: '#FFD166' });
+      sendMessage('JOIN', { run_id: data.run_id, desired_skin: '#f0f0f0' });
       startInputLoop();
     };
 
@@ -331,7 +338,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     engine.ensureBots(OFFLINE_BOT_COUNT);
     NET.interpDelayMs = Math.max(50, Math.round((1000 / engine.tickRate) * 1.4));
     const playerId = 'player-local';
-    engine.addPlayer(playerId, '#FFD166');
+    engine.addPlayer(playerId, '#f0f0f0');
     offlineEngineRef.current = engine;
     offlineTickCountRef.current = 0;
     frameRef.current.acc = 0;
@@ -1016,9 +1023,17 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     context.fillStyle = pattern;
     context.fillRect(view.camX - w, view.camY - h, w * 2, h * 2);
 
-    drawWorldBorder(context, state.worldRadius);
+    drawWorldBorder(context, state.worldRadius, view, now);
     drawPellets(context, state, view, sprites);
-    drawSnakes(context, state, view, me?.id, renderNow);
+    drawSnakes(context, state, view, me?.id, renderNow, snakeSpriteCacheRef.current);
+
+    const vignette = vignetteRef.current;
+    if (vignette) {
+      context.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      context.globalAlpha = 0.9;
+      context.drawImage(vignette, 0, 0, view.vw, view.vh);
+      context.globalAlpha = 1;
+    }
   };
 
   const startCashoutCountdown = (): void => {
@@ -1148,6 +1163,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
         context.imageSmoothingEnabled = true;
         context.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       }
+      vignetteRef.current = buildVignette(Math.max(1, Math.floor(view.vw)), Math.max(1, Math.floor(view.vh)));
     };
 
     const observer = new ResizeObserver(resize);
@@ -1414,14 +1430,61 @@ function mapOfflinePelletEvents(events: SlitherPelletEvent[]): SnapshotPayload['
   });
 }
 
-function drawWorldBorder(context: CanvasRenderingContext2D, radius: number): void {
-  context.strokeStyle = 'rgba(255,255,255,0.1)';
-  context.lineWidth = 24;
+function drawWorldBorder(
+  context: CanvasRenderingContext2D,
+  radius: number,
+  view: { vw: number; vh: number; scale: number; camX: number; camY: number },
+  nowMs: number,
+): void {
+  const halfW = (view.vw / 2) / view.scale;
+  const halfH = (view.vh / 2) / view.scale;
+  const visibleR = Math.hypot(halfW, halfH) + 40;
+  const camDist = Math.hypot(view.camX, view.camY);
+  if (camDist + visibleR < radius - 40) {
+    return;
+  }
+
+  const boundsMinX = view.camX - halfW;
+  const boundsMaxX = view.camX + halfW;
+  const boundsMinY = view.camY - halfH;
+  const boundsMaxY = view.camY + halfH;
+  const corners: Array<[number, number]> = [
+    [boundsMinX, boundsMinY],
+    [boundsMaxX, boundsMinY],
+    [boundsMaxX, boundsMaxY],
+    [boundsMinX, boundsMaxY],
+  ];
+  let hasOutside = false;
+  for (const [x, y] of corners) {
+    if (x * x + y * y > radius * radius) {
+      hasOutside = true;
+      break;
+    }
+  }
+
+  if (hasOutside) {
+    context.save();
+    context.fillStyle = 'rgba(0,0,0,0.34)';
+    context.beginPath();
+    context.rect(boundsMinX, boundsMinY, boundsMaxX - boundsMinX, boundsMaxY - boundsMinY);
+    context.moveTo(radius, 0);
+    context.arc(0, 0, radius, 0, Math.PI * 2, true);
+    context.fill('evenodd');
+    context.restore();
+  }
+
+  const pulse = 0.56 + Math.sin(nowMs * 0.00135) * 0.1;
+  context.save();
+  context.strokeStyle = `rgba(255, 74, 74, ${pulse})`;
+  context.lineWidth = 14;
+  context.shadowColor = 'rgba(255, 60, 60, 0.45)';
+  context.shadowBlur = 14;
   context.beginPath();
   context.arc(0, 0, radius, 0, Math.PI * 2);
   context.stroke();
+  context.restore();
 
-  context.strokeStyle = 'rgba(255,255,255,0.2)';
+  context.strokeStyle = 'rgba(255, 210, 210, 0.62)';
   context.lineWidth = 2;
   context.beginPath();
   context.arc(0, 0, radius, 0, Math.PI * 2);
@@ -1485,7 +1548,9 @@ function drawSnakes(
   view: { scale: number; camX: number; camY: number },
   selfId?: string,
   renderNow?: number,
+  spriteCache?: Map<string, SnakeSprite>,
 ): void {
+  const cache = spriteCache ?? new Map<string, SnakeSprite>();
   const renderTime = typeof renderNow === 'number' ? renderNow : performance.now();
   for (const snake of state.drawSnakes) {
     const rs = getInterpolatedSnake(snake, renderTime, NET.maxExtrapMs);
@@ -1511,23 +1576,23 @@ function drawSnakes(
       pointStep = Math.max(pointStep, 4);
     }
 
-    context.strokeStyle = `hsl(${rs.h}, 90%, 58%)`;
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    context.lineWidth = rs.rr * 2;
-    context.beginPath();
-    context.moveTo(pts[0], pts[1]);
-    for (let i = 2; i < pts.length; i += 2 * pointStep) {
-      context.lineTo(pts[i], pts[i + 1]);
+    const skinMono = !!selfId && rs.id === selfId;
+
+    for (let i = pts.length - 2; i >= 2; i -= 2 * pointStep) {
+      const segX = pts[i];
+      const segY = pts[i + 1];
+      const ratio = i / Math.max(2, pts.length - 2);
+      const segRadius = rs.rr * (skinMono ? 0.84 + 0.14 * (1 - ratio) : 0.76 + 0.2 * (1 - ratio));
+      const sprite = getSnakeSegmentSprite(cache, rs.h, segRadius, false, skinMono);
+      const half = sprite.size * 0.5;
+      context.drawImage(sprite.canvas, segX - half, segY - half, sprite.size, sprite.size);
     }
-    context.stroke();
 
     const hx = pts[pts.length - 2];
     const hy = pts[pts.length - 1];
-    context.fillStyle = `hsl(${rs.h}, 90%, 62%)`;
-    context.beginPath();
-    context.arc(hx, hy, rs.rr * 1.05, 0, Math.PI * 2);
-    context.fill();
+    const headSprite = getSnakeSegmentSprite(cache, rs.h, rs.rr * 1.12, true, skinMono);
+    const headHalf = headSprite.size * 0.5;
+    context.drawImage(headSprite.canvas, hx - headHalf, hy - headHalf, headSprite.size, headSprite.size);
 
     const ang = rs.ra || 0;
     const ex = Math.cos(ang);
@@ -1544,11 +1609,23 @@ function drawSnakes(
 
     context.fillStyle = 'rgba(0,0,0,0.55)';
     context.beginPath();
-    context.arc(e1x, e1y, rs.rr * 0.18, 0, Math.PI * 2);
-    context.arc(e2x, e2y, rs.rr * 0.18, 0, Math.PI * 2);
+    context.arc(e1x + rs.rr * 0.03, e1y + rs.rr * 0.05, rs.rr * 0.26, 0, Math.PI * 2);
+    context.arc(e2x + rs.rr * 0.03, e2y + rs.rr * 0.05, rs.rr * 0.26, 0, Math.PI * 2);
     context.fill();
 
-    if (selfId && rs.id === selfId) {
+    context.fillStyle = '#ffffff';
+    context.beginPath();
+    context.arc(e1x, e1y, rs.rr * 0.23, 0, Math.PI * 2);
+    context.arc(e2x, e2y, rs.rr * 0.23, 0, Math.PI * 2);
+    context.fill();
+
+    context.fillStyle = '#111111';
+    context.beginPath();
+    context.arc(e1x + ex * rs.rr * 0.08, e1y + ey * rs.rr * 0.08, rs.rr * 0.09, 0, Math.PI * 2);
+    context.arc(e2x + ex * rs.rr * 0.08, e2y + ey * rs.rr * 0.08, rs.rr * 0.09, 0, Math.PI * 2);
+    context.fill();
+
+    if (skinMono) {
       context.fillStyle = 'rgba(255,255,255,0.8)';
       context.font = `${14 / Math.max(0.45, view.scale)}px system-ui`;
       context.textAlign = 'center';
@@ -1628,29 +1705,229 @@ function ensureRenderPointBuffer(snake: SnakeEntry, len: number): number[] {
   return snake.renderPoints;
 }
 
-function createGridPattern(context: CanvasRenderingContext2D): CanvasPattern {
-  const canvas = document.createElement('canvas');
-  canvas.width = 96;
-  canvas.height = 96;
-  const grid = canvas.getContext('2d');
-  if (!grid) {
-    return context.createPattern(canvas, 'repeat')!;
+function getSnakeSegmentSprite(
+  cache: Map<string, SnakeSprite>,
+  hue: number,
+  radius: number,
+  isHead: boolean,
+  monoSkin: boolean,
+): SnakeSprite {
+  const quantizedRadius = Math.max(5, Math.round(radius * 2) / 2);
+  const hueKey = ((Math.round(hue) % 360) + 360) % 360;
+  const key = `${monoSkin ? 'mono' : 't'}|${hueKey}|${quantizedRadius}|${isHead ? 'h' : 'b'}`;
+  const cached = cache.get(key);
+  if (cached) {
+    return cached;
   }
-  grid.fillStyle = '#0b0f14';
-  grid.fillRect(0, 0, canvas.width, canvas.height);
-  grid.strokeStyle = 'rgba(255,255,255,0.06)';
-  grid.lineWidth = 1;
-  grid.beginPath();
-  grid.moveTo(0, 0);
-  grid.lineTo(canvas.width, 0);
-  grid.moveTo(0, 0);
-  grid.lineTo(0, canvas.height);
-  grid.moveTo(0, canvas.height / 2);
-  grid.lineTo(canvas.width, canvas.height / 2);
-  grid.moveTo(canvas.width / 2, 0);
-  grid.lineTo(canvas.width / 2, canvas.height);
-  grid.stroke();
-  return context.createPattern(canvas, 'repeat')!;
+
+  const margin = Math.ceil(quantizedRadius * (monoSkin ? 0.92 : 0.6));
+  const size = Math.ceil((quantizedRadius + margin) * 2);
+  const center = size * 0.5;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext('2d');
+  if (!g) {
+    const fallback = { canvas, size };
+    cache.set(key, fallback);
+    return fallback;
+  }
+
+  const r = quantizedRadius;
+  const shadowOffset = r * (monoSkin ? 0.15 : 0.12);
+  g.fillStyle = monoSkin ? 'rgba(0,0,0,0.24)' : 'rgba(0,0,0,0.30)';
+  g.beginPath();
+  g.arc(center + shadowOffset, center + shadowOffset, r * 1.02, 0, Math.PI * 2);
+  g.fill();
+
+  if (monoSkin) {
+    const glow = g.createRadialGradient(center, center, r * 0.35, center, center, r * 1.55);
+    glow.addColorStop(0, 'rgba(255,255,255,0.42)');
+    glow.addColorStop(0.68, 'rgba(255,255,255,0.12)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(center, center, r * 1.55, 0, Math.PI * 2);
+    g.fill();
+
+    const base = g.createRadialGradient(
+      center - r * 0.36,
+      center - r * 0.42,
+      r * 0.08,
+      center,
+      center,
+      r,
+    );
+    base.addColorStop(0, '#ffffff');
+    base.addColorStop(0.36, '#eeeeee');
+    base.addColorStop(0.7, '#cfcfcf');
+    base.addColorStop(1, '#9e9e9e');
+    g.fillStyle = base;
+    g.beginPath();
+    g.arc(center, center, r, 0, Math.PI * 2);
+    g.fill();
+
+    const shade = g.createRadialGradient(
+      center + r * 0.44,
+      center + r * 0.44,
+      r * 0.08,
+      center + r * 0.42,
+      center + r * 0.42,
+      r * 1.1,
+    );
+    shade.addColorStop(0, 'rgba(0,0,0,0)');
+    shade.addColorStop(0.72, 'rgba(0,0,0,0.08)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.32)');
+    g.fillStyle = shade;
+    g.beginPath();
+    g.arc(center, center, r, 0, Math.PI * 2);
+    g.fill();
+
+    g.globalAlpha = 0.8;
+    g.strokeStyle = 'rgba(72,72,72,0.62)';
+    g.lineWidth = Math.max(1, r * 0.12);
+    g.beginPath();
+    g.arc(center, center, r * 0.93, 0, Math.PI * 2);
+    g.stroke();
+
+    g.globalAlpha = 0.62;
+    g.strokeStyle = 'rgba(255,255,255,0.62)';
+    g.lineWidth = Math.max(1, r * 0.12);
+    g.beginPath();
+    g.arc(center - r * 0.08, center - r * 0.09, r * 0.6, Math.PI * 1.04, Math.PI * 1.86);
+    g.stroke();
+  } else {
+    const light = `hsl(${hueKey}, 88%, 72%)`;
+    const mid = `hsl(${hueKey}, 90%, 58%)`;
+    const dark = `hsl(${hueKey}, 84%, 42%)`;
+    const rim = `hsla(${hueKey}, 95%, 34%, 0.85)`;
+    const base = g.createRadialGradient(
+      center - r * 0.35,
+      center - r * 0.4,
+      r * 0.12,
+      center,
+      center,
+      r,
+    );
+    base.addColorStop(0, light);
+    base.addColorStop(0.45, mid);
+    base.addColorStop(1, dark);
+    g.fillStyle = base;
+    g.beginPath();
+    g.arc(center, center, r, 0, Math.PI * 2);
+    g.fill();
+
+    g.strokeStyle = rim;
+    g.lineWidth = Math.max(1, r * 0.14);
+    g.globalAlpha = 0.72;
+    g.beginPath();
+    g.arc(center, center, r * 0.94, 0, Math.PI * 2);
+    g.stroke();
+
+    g.strokeStyle = 'rgba(255,255,255,0.28)';
+    g.lineWidth = Math.max(1, r * 0.1);
+    g.globalAlpha = 0.58;
+    g.beginPath();
+    g.arc(center - r * 0.1, center - r * 0.12, r * 0.58, Math.PI * 1.03, Math.PI * 1.86);
+    g.stroke();
+  }
+
+  if (isHead) {
+    g.globalAlpha = monoSkin ? 0.28 : 0.33;
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(center - r * 0.28, center - r * 0.34, r * 0.44, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  g.globalAlpha = 1;
+  const sprite = { canvas, size };
+  cache.set(key, sprite);
+  return sprite;
+}
+
+function drawHexPath(context: CanvasRenderingContext2D, cx: number, cy: number, side: number): void {
+  const hw = (Math.sqrt(3) * side) / 2;
+  context.beginPath();
+  context.moveTo(cx, cy - side);
+  context.lineTo(cx + hw, cy - side * 0.5);
+  context.lineTo(cx + hw, cy + side * 0.5);
+  context.lineTo(cx, cy + side);
+  context.lineTo(cx - hw, cy + side * 0.5);
+  context.lineTo(cx - hw, cy - side * 0.5);
+  context.closePath();
+}
+
+function buildHexTile(size: number): HTMLCanvasElement {
+  const side = size;
+  const hexW = Math.sqrt(3) * side;
+  const stepY = side * 1.5;
+  const tileW = Math.ceil(hexW * 2);
+  const tileH = Math.ceil(stepY * 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = tileW;
+  canvas.height = tileH;
+  const g = canvas.getContext('2d');
+  if (!g) {
+    return canvas;
+  }
+
+  g.fillStyle = '#070d1d';
+  g.fillRect(0, 0, tileW, tileH);
+
+  g.strokeStyle = '#1a263f';
+  g.lineWidth = 2;
+  g.globalAlpha = 0.82;
+  for (let row = -1; row < 5; row += 1) {
+    const cy = row * stepY + side;
+    const offset = row % 2 === 0 ? 0 : hexW * 0.5;
+    for (let col = -1; col < 5; col += 1) {
+      const cx = col * hexW + offset;
+      drawHexPath(g, cx, cy, side);
+      g.stroke();
+    }
+  }
+
+  g.strokeStyle = 'rgba(180,210,255,0.08)';
+  g.lineWidth = 1;
+  g.globalAlpha = 0.5;
+  for (let row = -1; row < 5; row += 1) {
+    const cy = row * stepY + side;
+    const offset = row % 2 === 0 ? 0 : hexW * 0.5;
+    for (let col = -1; col < 5; col += 1) {
+      const cx = col * hexW + offset;
+      drawHexPath(g, cx, cy, side * 0.8);
+      g.stroke();
+    }
+  }
+
+  g.globalAlpha = 1;
+  return canvas;
+}
+
+function createGridPattern(context: CanvasRenderingContext2D): CanvasPattern {
+  const tile = buildHexTile(38);
+  return context.createPattern(tile, 'repeat')!;
+}
+
+function buildVignette(width: number, height: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const g = canvas.getContext('2d');
+  if (!g) {
+    return canvas;
+  }
+  const cx = width * 0.5;
+  const cy = height * 0.5;
+  const radius = Math.hypot(width, height) * 0.58;
+  const grad = g.createRadialGradient(cx, cy, radius * 0.05, cx, cy, radius);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(0.62, 'rgba(0,0,0,0.08)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, width, height);
+  return canvas;
 }
 
 function ensurePelletSprites(ref: { current: HTMLCanvasElement[] }): HTMLCanvasElement[] {
