@@ -13,6 +13,16 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 // Edite via env var: BOT_COUNT=20 npm start
 const BOT_COUNT = process.env.BOT_COUNT ? Math.max(0, Number(process.env.BOT_COUNT)) : 20;
 const ENABLE_BOTS = BOT_COUNT > 0;
+const SNAPSHOT_RATE = process.env.SNAPSHOT_RATE ? Math.max(5, Number(process.env.SNAPSHOT_RATE)) : 15;
+const SNAPSHOT_FULL_POINTS_EVERY = process.env.SNAPSHOT_FULL_POINTS_EVERY
+  ? Math.max(1, Number(process.env.SNAPSHOT_FULL_POINTS_EVERY))
+  : 3;
+
+const SNAPSHOT_NEAR_POINTS = process.env.SNAPSHOT_NEAR_POINTS ? Math.max(24, Number(process.env.SNAPSHOT_NEAR_POINTS)) : 120;
+const SNAPSHOT_MID_POINTS = process.env.SNAPSHOT_MID_POINTS ? Math.max(24, Number(process.env.SNAPSHOT_MID_POINTS)) : 80;
+const SNAPSHOT_FAR_POINTS = process.env.SNAPSHOT_FAR_POINTS ? Math.max(24, Number(process.env.SNAPSHOT_FAR_POINTS)) : 40;
+const SNAPSHOT_NEAR_DIST = process.env.SNAPSHOT_NEAR_DIST ? Math.max(300, Number(process.env.SNAPSHOT_NEAR_DIST)) : 900;
+const SNAPSHOT_FAR_DIST = process.env.SNAPSHOT_FAR_DIST ? Math.max(600, Number(process.env.SNAPSHOT_FAR_DIST)) : 1900;
 // =================================
 
 const app = express();
@@ -27,6 +37,7 @@ const game = new Game({
   pelletTarget: 4200,
   maxSendPoints: 140,
 });
+game.snapshotRate = SNAPSHOT_RATE;
 
 if (ENABLE_BOTS) {
   for (let i = 0; i < BOT_COUNT; i++) game.addBot(`bot-${i + 1}`);
@@ -79,18 +90,38 @@ server.listen(PORT, () => {
   console.log(`[server] http://localhost:${PORT}`);
 });
 
-// game loop
+// game loop (simulação e snapshot desacoplados)
 const dt = 1 / game.tickRate;
-const intervalMs = Math.round(1000 / game.tickRate);
+const simIntervalMs = Math.round(1000 / game.tickRate);
+const snapshotIntervalMs = Math.round(1000 / SNAPSHOT_RATE);
+let snapshotSeq = 0;
 
 setInterval(() => {
   game.update(dt);
-  const payload = game.buildStatePayload();
-  const str = JSON.stringify(payload);
+}, simIntervalMs);
+
+setInterval(() => {
+  snapshotSeq += 1;
+  const includePoints = snapshotSeq % SNAPSHOT_FULL_POINTS_EVERY === 0;
+  const pelletEvents = game._flushPelletEvents();
 
   for (const ws of wss.clients) {
-    if (ws.readyState === WebSocket.OPEN && ws._joined) {
-      ws.send(str);
-    }
+    if (ws.readyState !== WebSocket.OPEN || !ws._joined) continue;
+
+    const payload = game.buildStatePayload({
+      viewerId: ws._pid,
+      includePoints,
+      snapshotSeq,
+      snapshotRate: SNAPSHOT_RATE,
+      baseMaxPoints: game.maxSendPoints,
+      nearMaxPoints: SNAPSHOT_NEAR_POINTS,
+      midMaxPoints: SNAPSHOT_MID_POINTS,
+      farMaxPoints: SNAPSHOT_FAR_POINTS,
+      nearDist: SNAPSHOT_NEAR_DIST,
+      farDist: SNAPSHOT_FAR_DIST,
+      pelletEvents,
+    });
+
+    safeSend(ws, payload);
   }
-}, intervalMs);
+}, snapshotIntervalMs);

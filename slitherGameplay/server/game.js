@@ -545,15 +545,40 @@ class Game {
         boostMult: this.boostMult,
       },
       pellets,
-      state: this.buildStatePayload()
+      state: this.buildStatePayload({
+        viewerId: forId,
+        includePoints: true,
+        snapshotSeq: 0,
+        snapshotRate: this.snapshotRate ?? this.tickRate,
+        pelletEvents: [],
+      })
     };
   }
 
-  buildStatePayload() {
+  _maxPointsForViewerSnake(viewer, snake, opts) {
+    const baseMax = Math.max(24, opts.baseMaxPoints ?? this.maxSendPoints);
+    if (!viewer || !viewer.alive) return baseMax;
+
+    const nearDist = opts.nearDist ?? 900;
+    const farDist = opts.farDist ?? 1900;
+    const nearMax = Math.max(24, Math.min(baseMax, opts.nearMaxPoints ?? 120));
+    const midMax = Math.max(24, Math.min(baseMax, opts.midMaxPoints ?? 80));
+    const farMax = Math.max(24, Math.min(baseMax, opts.farMaxPoints ?? 40));
+
+    const d2 = dist2(viewer.x, viewer.y, snake.x, snake.y);
+    if (d2 <= nearDist * nearDist) return nearMax;
+    if (d2 <= farDist * farDist) return midMax;
+    return farMax;
+  }
+
+  buildStatePayload(options = {}) {
+    const includePoints = options.includePoints !== false;
+    const viewer = options.viewerId ? this.snakes.get(options.viewerId) : null;
     const snakes = [];
     for (const s of this.snakes.values()) {
       if (!s.alive) continue;
-      snakes.push({
+
+      const row = {
         id: s.id,
         n: s.name,
         h: s.hue,
@@ -563,15 +588,32 @@ class Game {
         b: !!s.boost,
         m: s.mass,
         r: s.radius,
-        p: s.points.sample(this.maxSendPoints),
-      });
+      };
+
+      if (includePoints) {
+        const maxPoints = this._maxPointsForViewerSnake(viewer, s, options);
+        row.p = s.points.sample(maxPoints);
+      }
+
+      snakes.push(row);
     }
 
     // leaderboard (top 10)
     snakes.sort((a, b) => b.m - a.m);
     const lb = snakes.slice(0, 10).map(s => ({ n: s.n, m: Math.floor(s.m) }));
 
-    return { t: 'state', now: this._now, snakes, lb, pe: this._flushPelletEvents() };
+    const pelletEvents = Array.isArray(options.pelletEvents) ? options.pelletEvents : this._flushPelletEvents();
+
+    return {
+      t: 'state',
+      now: this._now,
+      si: options.snapshotSeq ?? 0,
+      fp: includePoints ? 1 : 0,
+      sr: options.snapshotRate ?? this.tickRate,
+      snakes,
+      lb,
+      pe: pelletEvents
+    };
   }
 
   _flushPelletEvents() {

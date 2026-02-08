@@ -19,6 +19,12 @@
     leaderboardHz: 4,   // DOM é caro: não atualize a 60fps
     minimapHz: 20,      // minimapa não precisa rodar a 60fps
   };
+  const PERF_DEBUG = false; // true para logs periódicos de fps/draw/parse
+
+  const NET = {
+    interpDelayMs: 100, // atraso de render para interpolar snapshots
+    maxExtrapMs: 80,    // extrapolação curta pra reduzir tremida em jitter de rede
+  };
 
   // Prealoca itens do leaderboard (evita criar/remover DOM toda atualização)
   const LB_MAX = 10;
@@ -43,6 +49,14 @@
     pellets: new Map(), // id -> pellet
     leaderboard: [],
     lastServerNow: 0,
+    snapshotRate: 30,
+    debug: {
+      drawMsAcc: 0,
+      parseMsAcc: 0,
+      frames: 0,
+      snapshots: 0,
+      lastLogAt: performance.now(),
+    },
   };
 
   // ===== Leaderboard (DOM) =====
@@ -195,8 +209,13 @@
       uiStatus.textContent = 'erro';
     };
     ws.onmessage = (ev) => {
+      const parseStart = PERF_DEBUG ? performance.now() : 0;
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
+      if (PERF_DEBUG) {
+        state.debug.parseMsAcc += (performance.now() - parseStart);
+        state.debug.snapshots += 1;
+      }
       if (msg.t === 'init') onInit(msg);
       else if (msg.t === 'state') onState(msg);
     };
@@ -227,7 +246,12 @@
   }
 
   function onState(msg) {
-    state.lastServerNow = msg.now || 0;
+    const snapNow = msg.now || Date.now();
+    state.lastServerNow = snapNow;
+    if (typeof msg.sr === 'number' && msg.sr > 0) {
+      state.snapshotRate = msg.sr;
+      NET.interpDelayMs = Math.max(90, Math.round((1000 / msg.sr) * 1.6));
+    }
 
     // pellet events
     if (Array.isArray(msg.pe)) {
@@ -245,31 +269,63 @@
     const seen = new Set();
     for (const s of msg.snakes || []) {
       seen.add(s.id);
-      const prev = state.snakes.get(s.id);
-      const pts = Array.isArray(s.p) ? s.p : [];
-      if (!prev) {
+      const entry = state.snakes.get(s.id);
+      const pts = Array.isArray(s.p) && s.p.length >= 4 ? s.p : null;
+      const snap = {
+        t: snapNow,
+        x: s.x,
+        y: s.y,
+        a: s.a || 0,
+        b: !!s.b,
+        m: s.m || 0,
+        r: s.r || 10,
+        p: pts,
+      };
+
+      if (!entry) {
+        const seedPoints = pts || [s.x, s.y, s.x, s.y];
+        if (!snap.p) snap.p = seedPoints;
         state.snakes.set(s.id, {
           id: s.id,
           n: s.n || '',
           h: s.h || 0,
-          x: s.x, y: s.y,
-          a: s.a || 0,
-          b: !!s.b,
-          m: s.m || 0,
-          r: s.r || 10,
-          p: pts,
+          x: s.x,
+          y: s.y,
+          a: snap.a,
+          b: snap.b,
+          m: snap.m,
+          r: snap.r,
+          prevSnap: snap,
+          nextSnap: snap,
+          lastFullPoints: seedPoints,
+          lastFullX: snap.x,
+          lastFullY: snap.y,
+          renderPoints: null,
+          rp: pts,
+          rx: snap.x,
+          ry: snap.y,
+          ra: snap.a,
+          rr: snap.r,
+          rm: snap.m,
           last: performance.now(),
         });
       } else {
-        prev.n = s.n || prev.n;
-        prev.h = s.h ?? prev.h;
-        prev.x = s.x; prev.y = s.y;
-        prev.a = s.a ?? prev.a;
-        prev.b = !!s.b;
-        prev.m = s.m ?? prev.m;
-        prev.r = s.r ?? prev.r;
-        prev.p = pts;
-        prev.last = performance.now();
+        entry.n = s.n || entry.n;
+        entry.h = s.h ?? entry.h;
+        entry.x = s.x;
+        entry.y = s.y;
+        entry.a = snap.a;
+        entry.b = snap.b;
+        entry.m = snap.m;
+        entry.r = snap.r;
+        entry.prevSnap = entry.nextSnap || snap;
+        entry.nextSnap = snap;
+        if (pts) {
+          entry.lastFullPoints = pts;
+          entry.lastFullX = snap.x;
+          entry.lastFullY = snap.y;
+        }
+        entry.last = performance.now();
       }
     }
 
@@ -285,7 +341,7 @@
     // cache draw order pra render (evita criar arrays no draw())
     state.drawSnakes.length = 0;
     for (const s of state.snakes.values()) state.drawSnakes.push(s);
-    state.drawSnakes.sort((a, b) => a.m - b.m);
+    state.drawSnakes.sort((a, b) => (a.nextSnap?.m || a.m || 0) - (b.nextSnap?.m || b.m || 0));
   }
 
   function renderLeaderboard() {
@@ -320,12 +376,32 @@
 
   function loop(now) {
     frameNow = now;
-    const dt = (now - lastFrame) / 1000;
     lastFrame = now;
 
     stepInput();
+    const drawStart = PERF_DEBUG ? performance.now() : 0;
     draw();
+    if (PERF_DEBUG) {
+      state.debug.drawMsAcc += (performance.now() - drawStart);
+    }
     maybeRenderLeaderboard(now);
+    if (PERF_DEBUG) state.debug.frames += 1;
+
+    if (PERF_DEBUG && now - state.debug.lastLogAt >= 2000) {
+      const elapsed = now - state.debug.lastLogAt;
+      const fps = (state.debug.frames * 1000) / Math.max(1, elapsed);
+      const avgDraw = state.debug.drawMsAcc / Math.max(1, state.debug.frames);
+      const avgParse = state.debug.parseMsAcc / Math.max(1, state.debug.snapshots);
+      console.log(
+        `[perf] fps=${fps.toFixed(1)} draw=${avgDraw.toFixed(2)}ms parse=${avgParse.toFixed(2)}ms ` +
+        `snaps=${state.debug.snapshots} pel=${state.pellets.size} snakes=${state.snakes.size}`
+      );
+      state.debug.frames = 0;
+      state.debug.drawMsAcc = 0;
+      state.debug.parseMsAcc = 0;
+      state.debug.snapshots = 0;
+      state.debug.lastLogAt = now;
+    }
 
     requestAnimationFrame(loop);
   }
@@ -362,18 +438,89 @@
   }
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function lerpAngle(a, b, t) { return a + angleDiff(a, b) * t; }
+
+  function ensureRenderPointBuffer(snake, len) {
+    if (!snake.renderPoints || snake.renderPoints.length !== len) {
+      snake.renderPoints = new Array(len);
+    }
+    return snake.renderPoints;
+  }
+
+  function getInterpolatedSnake(snake, renderServerNow) {
+    const prev = snake.prevSnap;
+    const next = snake.nextSnap;
+    if (!prev || !next) return null;
+
+    let t = 1;
+    if (next.t > prev.t) {
+      t = (renderServerNow - prev.t) / (next.t - prev.t);
+    }
+
+    const maxExtrapT = next.t > prev.t ? NET.maxExtrapMs / (next.t - prev.t) : 0;
+    t = clamp(t, 0, 1 + maxExtrapT);
+
+    const x = lerp(prev.x, next.x, t);
+    const y = lerp(prev.y, next.y, t);
+    const a = lerpAngle(prev.a || 0, next.a || 0, t);
+    const m = lerp(prev.m || 0, next.m || 0, t);
+    const r = lerp(prev.r || 10, next.r || 10, t);
+
+    const prevP = Array.isArray(prev.p) ? prev.p : null;
+    const nextP = Array.isArray(next.p) ? next.p : null;
+    let points = null;
+
+    if (prevP && nextP && prevP.length >= 4 && prevP.length === nextP.length) {
+      const out = ensureRenderPointBuffer(snake, prevP.length);
+      for (let i = 0; i < prevP.length; i++) {
+        out[i] = lerp(prevP[i], nextP[i], t);
+      }
+      points = out;
+    } else {
+      const src = (nextP && nextP.length >= 4)
+        ? nextP
+        : (prevP && prevP.length >= 4)
+          ? prevP
+          : snake.lastFullPoints;
+      if (!src || src.length < 4) return null;
+
+      const out = ensureRenderPointBuffer(snake, src.length);
+      const refX = (src === nextP) ? next.x : (src === prevP) ? prev.x : (snake.lastFullX ?? x);
+      const refY = (src === nextP) ? next.y : (src === prevP) ? prev.y : (snake.lastFullY ?? y);
+      const dx = x - refX;
+      const dy = y - refY;
+
+      for (let i = 0; i < src.length; i += 2) {
+        out[i] = src[i] + dx;
+        out[i + 1] = src[i + 1] + dy;
+      }
+      points = out;
+    }
+
+    snake.rx = x;
+    snake.ry = y;
+    snake.ra = a;
+    snake.rm = m;
+    snake.rr = r;
+    snake.rp = points;
+    return snake;
+  }
 
   // ============= Rendering ============
   function draw() {
+    const renderServerNow = Date.now() - NET.interpDelayMs;
+
     // camera: segue você
     const me = state.snakes.get(state.you);
-    if (me) {
+    const meInterp = me ? getInterpolatedSnake(me, renderServerNow) : null;
+    if (meInterp) {
       // suavização simples
-      view.camX += (me.x - view.camX) * 0.15;
-      view.camY += (me.y - view.camY) * 0.15;
+      view.camX += (meInterp.rx - view.camX) * 0.15;
+      view.camY += (meInterp.ry - view.camY) * 0.15;
 
       // zoom dinâmico (quanto maior, mais zoom out)
-      const dyn = clamp(1 / (1 + (me.m / 260)), 0.35, 1.0);
+      const dyn = clamp(1 / (1 + (meInterp.rm / 260)), 0.35, 1.0);
       view.scale = dyn * input.zoom;
     } else {
       view.scale = input.zoom;
@@ -404,7 +551,7 @@
     drawPelletsCulled();
 
     // snakes
-    drawSnakes();
+    drawSnakes(renderServerNow);
 
     // HUD overlay (minimap)
     ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
@@ -412,6 +559,12 @@
   }
 
   function drawWorldBorder() {
+    const halfW = (view.vw / 2) / view.scale;
+    const halfH = (view.vh / 2) / view.scale;
+    const visibleR = Math.hypot(halfW, halfH) + 30;
+    const camDist = Math.hypot(view.camX, view.camY);
+    if (camDist + visibleR < state.worldRadius - 40) return;
+
     const r = state.worldRadius;
     ctx.strokeStyle = 'rgba(255,255,255,0.10)';
     ctx.lineWidth = 24;
@@ -456,27 +609,38 @@
     }
   }
 
-  function drawSnakes() {
+  function drawSnakes(renderServerNow) {
     // desenha maiores por trás
     const arr = state.drawSnakes;
     for (let i = 0; i < arr.length; i++) {
-      drawSnake(arr[i]);
+      drawSnake(arr[i], renderServerNow);
     }
   }
 
-  function drawSnake(s) {
-    const pts = s.p;
+  function drawSnake(s, renderServerNow) {
+    const rs = getInterpolatedSnake(s, renderServerNow);
+    if (!rs) return;
+
+    const pts = rs.rp;
     if (!pts || pts.length < 4) return;
 
     // corpo
-    ctx.strokeStyle = `hsl(${s.h}, 90%, 58%)`;
+    ctx.strokeStyle = `hsl(${rs.h}, 90%, 58%)`;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = s.r * 2;
+    ctx.lineWidth = rs.rr * 2;
+
+    const dxCam = rs.rx - view.camX;
+    const dyCam = rs.ry - view.camY;
+    const dist2Cam = dxCam * dxCam + dyCam * dyCam;
+    let pointStep = 1;
+    if (view.scale < 0.75 && pts.length > 140) pointStep = 2;
+    if (view.scale < 0.55 || dist2Cam > 1800 * 1800) pointStep = Math.max(pointStep, 3);
+    if (view.scale < 0.45 || dist2Cam > 2500 * 2500) pointStep = Math.max(pointStep, 4);
 
     ctx.beginPath();
     ctx.moveTo(pts[0], pts[1]);
-    for (let i = 2; i < pts.length; i += 2) {
+    for (let i = 2; i < pts.length; i += 2 * pointStep) {
       ctx.lineTo(pts[i], pts[i + 1]);
     }
     ctx.stroke();
@@ -485,20 +649,20 @@
     const hx = pts[pts.length - 2];
     const hy = pts[pts.length - 1];
 
-    ctx.fillStyle = `hsl(${s.h}, 90%, 62%)`;
+    ctx.fillStyle = `hsl(${rs.h}, 90%, 62%)`;
     ctx.beginPath();
-    ctx.arc(hx, hy, s.r * 1.05, 0, Math.PI * 2);
+    ctx.arc(hx, hy, rs.rr * 1.05, 0, Math.PI * 2);
     ctx.fill();
 
     // olhos
-    const ang = s.a || 0;
+    const ang = rs.ra || 0;
     const ex = Math.cos(ang);
     const ey = Math.sin(ang);
     const px = -ey;
     const py = ex;
 
-    const eyeOff = s.r * 0.55;
-    const eyeFwd = s.r * 0.55;
+    const eyeOff = rs.rr * 0.55;
+    const eyeFwd = rs.rr * 0.55;
     const e1x = hx + ex * eyeFwd + px * eyeOff;
     const e1y = hy + ey * eyeFwd + py * eyeOff;
     const e2x = hx + ex * eyeFwd - px * eyeOff;
@@ -506,20 +670,17 @@
 
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.beginPath();
-    ctx.arc(e1x, e1y, s.r * 0.18, 0, Math.PI * 2);
-    ctx.arc(e2x, e2y, s.r * 0.18, 0, Math.PI * 2);
+    ctx.arc(e1x, e1y, rs.rr * 0.18, 0, Math.PI * 2);
+    ctx.arc(e2x, e2y, rs.rr * 0.18, 0, Math.PI * 2);
     ctx.fill();
 
     // nome (só se for você ou se estiver perto)
-    if (s.id === state.you) {
-      ctx.setTransform(view.dpr * view.scale, 0, 0, view.dpr * view.scale,
-        view.dpr * (view.vw / 2 - view.camX * view.scale),
-        view.dpr * (view.vh / 2 - view.camY * view.scale)
-      );
+    if (rs.id === state.you) {
+      const fontPx = 14 / Math.max(0.45, view.scale);
       ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.font = '14px system-ui';
+      ctx.font = `${fontPx}px system-ui`;
       ctx.textAlign = 'center';
-      ctx.fillText(s.n || 'you', hx, hy - s.r * 2.2);
+      ctx.fillText(rs.n || 'you', hx, hy - rs.rr * 2.2);
     }
   }
 
