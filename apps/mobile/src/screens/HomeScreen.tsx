@@ -21,6 +21,14 @@ const TABS = [
   { id: 'play', label: 'Jogar' },
 ] as const;
 
+const FEATURED_STAKE_VALUES = [100, 500, 2000];
+
+const LEADERBOARD_ENTRIES = [
+  { name: 'vipercore', value: '$13,704.34' },
+  { name: 'nebulafox', value: '$13,237.94' },
+  { name: 'slimepilot', value: '$11,384.94' },
+] as const;
+
 type TabId = (typeof TABS)[number]['id'];
 
 export function HomeScreen(): JSX.Element {
@@ -33,7 +41,7 @@ export function HomeScreen(): JSX.Element {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [stakes, setStakes] = useState<Stake[]>([]);
   const [selectedStakeId, setSelectedStakeId] = useState<string | null>(null);
-  const [customStake, setCustomStake] = useState('');
+  const [customStake] = useState('');
   const [run, setRun] = useState<RunStartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRun, setLoadingRun] = useState(false);
@@ -121,12 +129,41 @@ export function HomeScreen(): JSX.Element {
     }
   }, [identity, pixKey, pixKeyType]);
 
+  const featuredStakes = useMemo(() => pickFeaturedStakes(stakes), [stakes]);
+
+  useEffect(() => {
+    if (featuredStakes.length === 0) {
+      return;
+    }
+
+    if (!selectedStakeId || !featuredStakes.some((stake) => stake.id === selectedStakeId)) {
+      setSelectedStakeId(featuredStakes[0].id);
+    }
+  }, [featuredStakes, selectedStakeId]);
+
+  const selectedStake = useMemo(() => {
+    const fromFeatured = featuredStakes.find((stake) => stake.id === selectedStakeId) ?? null;
+    if (fromFeatured) {
+      return fromFeatured;
+    }
+    return stakes.find((stake) => stake.id === selectedStakeId) ?? null;
+  }, [featuredStakes, stakes, selectedStakeId]);
+
+  const stakeCents = useMemo(() => {
+    if (customStake.trim()) {
+      return parseAmountToCents(customStake);
+    }
+
+    return selectedStake ? Number.parseInt(selectedStake.amount_cents, 10) : null;
+  }, [customStake, selectedStake]);
+
   const loadInitialData = async (): Promise<void> => {
     try {
       const stakesResult = await listStakes();
       setStakes(stakesResult);
-      if (!selectedStakeId && stakesResult.length > 0) {
-        setSelectedStakeId(stakesResult[0].id);
+      const featured = pickFeaturedStakes(stakesResult);
+      if (!selectedStakeId && featured.length > 0) {
+        setSelectedStakeId(featured[0].id);
       }
       if (signedIn && accountId) {
         const walletResult = await getWallet(accountId);
@@ -151,19 +188,6 @@ export function HomeScreen(): JSX.Element {
     }
   };
 
-  const selectedStake = useMemo(
-    () => stakes.find((stake) => stake.id === selectedStakeId) ?? null,
-    [stakes, selectedStakeId],
-  );
-
-  const stakeCents = useMemo(() => {
-    if (customStake.trim()) {
-      return parseAmountToCents(customStake);
-    }
-
-    return selectedStake ? Number.parseInt(selectedStake.amount_cents, 10) : null;
-  }, [customStake, selectedStake]);
-
   const handleStartRun = async (): Promise<void> => {
     if (!ensureAuthenticated('play')) {
       return;
@@ -186,7 +210,6 @@ export function HomeScreen(): JSX.Element {
     }
   };
 
-  // If playing, show simple GameScreen
   if (tab === 'play' || (tab === 'play' && run)) {
     return (
       <GameScreen
@@ -200,8 +223,6 @@ export function HomeScreen(): JSX.Element {
     );
   }
 
-  // Helper to render other views (Deposit, Withdraw, History) inside a "Back" capable container
-  // accessing them from the main lobby
   if (tab !== 'lobby') {
     let content: JSX.Element | null = null;
     switch (tab) {
@@ -361,10 +382,8 @@ export function HomeScreen(): JSX.Element {
     );
   };
 
-  // LOBBY VIEW (Slither Style)
   return (
     <div className="slither-container">
-      {/* Background/Particles could go here if we had them */}
       <div className="slither-background" />
       {renderAuthModal()}
       {isMobile && isPortrait ? (
@@ -376,163 +395,138 @@ export function HomeScreen(): JSX.Element {
         </div>
       ) : null}
 
-      {/* Top Left: Identity */}
-      <div className="slither-corner top-left">
-        <div className="slither-text">
-          <strong>{identity?.full_name ?? 'Jogador'}</strong>
-        </div>
-        {signedIn ? (
-          <button type="button" className="slither-link" onClick={auth.signOut}>
-            Sair
-          </button>
-        ) : (
-          <button type="button" className="slither-link" onClick={() => setAuthOpen(true)}>
-            Entrar
-          </button>
-        )}
-      </div>
+      <main className="home-shell">
+        <header className="home-header">
+          <h1 className="home-brand">Slithermoney</h1>
+        </header>
 
-      {/* Top Right: Wallet */}
-      {!authOpen && !needsIdentity ? (
-        <div className="slither-corner top-right">
-          <div className="slither-text">
-            Sua Carteira
-          </div>
-          <div className="slither-text" style={{ fontSize: 18, color: '#fff' }}>
-            {formatCents(wallet?.available_balance_cents ?? '0')}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Center: Title & Play Form */}
-      <div className="slither-center">
-        <h1 className="slither-logo">
-          slither<span>.money</span>
-        </h1>
-
-        <div className="slither-input-wrapper">
-          <input
-            className="slither-input"
-            value={customStake}
-            onChange={(event) => {
-              setError(null);
-              setCustomStake(event.target.value);
-              // Clear simple stake selection if typing custom
-              if (event.target.value) setSelectedStakeId(null);
-            }}
-            placeholder="Valor da aposta (R$)"
-          />
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8 }}>
-            {stakes.slice(0, 3).map((stake) => (
+        <section className="home-grid">
+          <article className="home-card home-card--play">
+            <div className="home-play-head">
+              <span className="home-play-session">{signedIn ? 'Conectado' : 'Visitante'}</span>
               <button
-                key={stake.id}
                 type="button"
+                className="home-link-btn"
                 onClick={() => {
-                  setCustomStake('');
-                  setSelectedStakeId(stake.id);
-                }}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 12,
-                  color: stake.id === selectedStakeId ? '#4ade80' : 'rgba(255,255,255,0.5)',
-                  padding: '4px 8px',
-                  fontSize: 12,
-                  cursor: 'pointer'
+                  if (signedIn) {
+                    auth.signOut();
+                    return;
+                  }
+                  setAuthOpen(true);
+                  setAuthMode(needsIdentity ? 'signup' : 'login');
                 }}
               >
-                {stake.label}
+                {signedIn ? 'Sair' : 'Entrar'}
               </button>
-            ))}
-          </div>
-        </div>
-
-        {error ? <p className="error" style={{ textAlign: 'center' }}>{error}</p> : null}
-
-        <button
-          className="slither-button"
-          onClick={handleStartRun}
-          disabled={loadingRun}
-        >
-          {loadingRun ? 'Carregando' : 'Joga'}
-        </button>
-
-        {loadingRun && <div className="spinner" />}
-      </div>
-
-      {/* Bottom Left: Actions */}
-      {!authOpen && !needsIdentity ? (
-        <div className="slither-corner bottom-left">
-          <div
-            className="slither-link-column"
-            onClick={() => {
-              if (!ensureAuthenticated('deposit')) {
-                return;
-              }
-              setTab('deposit');
-            }}
-          >
-            <div className="slither-link-icon">
-              <span style={{ fontSize: 24, color: '#e2e8f0' }}>+</span>
             </div>
-            <span className="slither-link-label">Depositar</span>
-          </div>
-        </div>
-      ) : null}
 
-      {/* Bottom Right: History/Withdraw */}
-      {!authOpen && !needsIdentity ? (
-        <div className="slither-corner bottom-right">
-          <div style={{ display: 'flex', gap: 24 }}>
-            <div
-              className="slither-link-column"
-              onClick={() => {
-                if (!ensureAuthenticated('withdraw')) {
-                  return;
-                }
-                setTab('withdraw');
-              }}
-            >
-              <div className="slither-link-icon">
-                <span style={{ fontSize: 24, color: '#e2e8f0' }}>$</span>
+            <div className="home-player-row">
+              <div className="home-player-avatar">?</div>
+              <button
+                type="button"
+                className="home-player-name"
+                onClick={() => {
+                  setAuthOpen(true);
+                  setAuthMode(needsIdentity ? 'signup' : 'login');
+                }}
+              >
+                {signedIn ? identity?.full_name ?? 'Jogador' : 'Login para definir seu nome'}
+              </button>
+              <button
+                type="button"
+                className="home-player-edit"
+                onClick={() => {
+                  setAuthOpen(true);
+                  setAuthMode(needsIdentity ? 'signup' : 'login');
+                }}
+                aria-label="Abrir login"
+              >
+                ✎
+              </button>
+            </div>
+
+            <div className="home-stakes">
+              {featuredStakes.map((stake) => (
+                <button
+                  key={stake.id}
+                  type="button"
+                  className={`home-stake-btn ${selectedStakeId === stake.id ? 'active' : ''}`}
+                  onClick={() => {
+                    setError(null);
+                    setSelectedStakeId(stake.id);
+                  }}
+                >
+                  {formatStakeLabel(stake)}
+                </button>
+              ))}
+            </div>
+
+            <button className="home-join-btn" onClick={handleStartRun} disabled={loadingRun}>
+              {loadingRun ? 'Carregando...' : 'JOIN GAME'}
+            </button>
+
+            {error ? <p className="error home-error">{error}</p> : null}
+
+            <div className="home-stats-row">
+              <div className="home-stat-item">
+                <strong>40</strong>
+                <span>Players in Game</span>
               </div>
-              <span className="slither-link-label">Sacar</span>
-            </div>
-            <div
-              className="slither-link-column"
-              onClick={() => {
-                if (!ensureAuthenticated('history')) {
-                  return;
-                }
-                setTab('history');
-              }}
-            >
-              <div className="slither-link-icon">
-                <span style={{ fontSize: 24, color: '#e2e8f0' }}>H</span>
+              <div className="home-stat-item">
+                <strong>$1,316,622</strong>
+                <span>Global Player Winnings</span>
               </div>
-              <span className="slither-link-label">Histórico</span>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </article>
 
-      {/* Very Bottom: Footer Links */}
-      {!authOpen && !needsIdentity ? (
-        <div style={{
-          position: 'absolute',
-          bottom: 10,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          gap: 16,
-          opacity: 0.5
-        }}>
-          <span className="slither-text" style={{ fontSize: 10 }}>privacy</span>
-          <span className="slither-text" style={{ fontSize: 10 }}>terms</span>
-          <span className="slither-text" style={{ fontSize: 10 }}>contact</span>
-        </div>
-      ) : null}
+          <article className="home-card home-card--wallet">
+            <div className="home-card-title">Carteira</div>
+            <div className="home-wallet-value">{formatCents(wallet?.available_balance_cents ?? '0')}</div>
 
+            <div className="home-wallet-actions">
+              <button
+                type="button"
+                className="home-action-btn home-action-btn--deposit"
+                onClick={() => {
+                  if (!ensureAuthenticated('deposit')) {
+                    return;
+                  }
+                  setTab('deposit');
+                }}
+              >
+                Depositar
+              </button>
+              <button
+                type="button"
+                className="home-action-btn home-action-btn--withdraw"
+                onClick={() => {
+                  if (!ensureAuthenticated('withdraw')) {
+                    return;
+                  }
+                  setTab('withdraw');
+                }}
+              >
+                Sacar
+              </button>
+            </div>
+          </article>
+
+          <article className="home-card home-card--leaderboard">
+            <div className="home-leaderboard-head">
+              <div className="home-card-title">Leaderboard</div>
+              <span className="home-live-pill">Live</span>
+            </div>
+            <ol className="home-leaderboard-list">
+              {LEADERBOARD_ENTRIES.map((entry, index) => (
+                <li key={entry.name}>
+                  <span>{index + 1}. {entry.name}</span>
+                  <strong>{entry.value}</strong>
+                </li>
+              ))}
+            </ol>
+          </article>
+        </section>
+      </main>
     </div>
   );
 
@@ -547,6 +541,39 @@ export function HomeScreen(): JSX.Element {
     }
     return false;
   }
+}
+
+function pickFeaturedStakes(stakes: Stake[]): Stake[] {
+  const used = new Set<string>();
+  const picked: Stake[] = [];
+
+  for (const cents of FEATURED_STAKE_VALUES) {
+    const match = stakes.find((stake) => Number.parseInt(stake.amount_cents, 10) === cents);
+    if (match && !used.has(match.id)) {
+      picked.push(match);
+      used.add(match.id);
+    }
+  }
+
+  for (const stake of stakes) {
+    if (picked.length >= 3) {
+      break;
+    }
+    if (!used.has(stake.id)) {
+      picked.push(stake);
+      used.add(stake.id);
+    }
+  }
+
+  return picked;
+}
+
+function formatStakeLabel(stake: Stake): string {
+  const value = Number.parseInt(stake.amount_cents, 10) / 100;
+  if (Number.isInteger(value)) {
+    return `$${value.toFixed(0)}`;
+  }
+  return `$${value.toFixed(2)}`;
 }
 
 function parseAmountToCents(value: string): number | null {
