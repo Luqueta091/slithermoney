@@ -26,6 +26,18 @@ type GameScreenProps = {
   onExit: () => void;
 };
 
+type SnakeSnapshot = {
+  t: number;
+  x: number;
+  y: number;
+  a: number;
+  b: boolean;
+  m: number;
+  r: number;
+  h: number;
+  p: number[] | null;
+};
+
 type SnakeEntry = {
   id: string;
   x: number;
@@ -36,6 +48,18 @@ type SnakeEntry = {
   r: number;
   h: number;
   p: number[];
+  prevSnap: SnakeSnapshot | null;
+  nextSnap: SnakeSnapshot | null;
+  lastFullPoints: number[] | null;
+  lastFullX: number;
+  lastFullY: number;
+  renderPoints: number[] | null;
+  rp: number[] | null;
+  rx: number;
+  ry: number;
+  ra: number;
+  rr: number;
+  rm: number;
 };
 
 type PelletEntry = {
@@ -80,13 +104,19 @@ const PERF = {
 
 const OFFLINE_MODE = true;
 const OFFLINE_BOT_COUNT = 20;
-const OFFLINE_TICK_RATE = 60;
+const OFFLINE_TICK_RATE = 72;
 const OFFLINE_INPUT_HZ = 60;
+const OFFLINE_SNAPSHOT_POINTS = 320;
 const CASHOUT_HOLD_MS = 3000;
 const CASHOUT_FEE_BPS = 1000;
+const NET = {
+  interpDelayMs: 96,
+  maxExtrapMs: 80,
+};
 
 export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const inputIntervalRef = useRef<number | null>(null);
@@ -94,11 +124,11 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const frameRef = useRef({
     last: 0,
     acc: 0,
-    step: 1000 / 60,
+    step: 1000 / OFFLINE_TICK_RATE,
   });
   const offlineEngineRef = useRef<SlitherEngine | null>(null);
-  const offlineTickRef = useRef<number | null>(null);
   const offlineTickCountRef = useRef(0);
+  const lastStatsRef = useRef(0);
   const playerIdRef = useRef<string | null>(null);
   const seqRef = useRef(1);
   const overlayOpenRef = useRef(false);
@@ -224,7 +254,10 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     if (!run || !isMobile) {
       return;
     }
-    const orientation = screen.orientation;
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (type: string) => Promise<void>;
+      unlock?: () => void;
+    };
     if (!orientation || typeof orientation.lock !== 'function') {
       return;
     }
@@ -296,53 +329,67 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
 
     const engine = new SlitherEngine({ tickRate: OFFLINE_TICK_RATE });
     engine.ensureBots(OFFLINE_BOT_COUNT);
+    NET.interpDelayMs = Math.max(50, Math.round((1000 / engine.tickRate) * 1.4));
     const playerId = 'player-local';
     engine.addPlayer(playerId, '#FFD166');
     offlineEngineRef.current = engine;
     offlineTickCountRef.current = 0;
+    frameRef.current.acc = 0;
+    frameRef.current.step = 1000 / engine.tickRate;
     playerIdRef.current = playerId;
 
-    const initialSnapshot = buildOfflineSnapshot(engine, offlineTickCountRef.current, true, true);
+    const initialSnapshot = buildOfflineSnapshot(
+      engine,
+      offlineTickCountRef.current,
+      true,
+      true,
+      OFFLINE_SNAPSHOT_POINTS,
+    );
     handleSnapshot(initialSnapshot);
     startInputLoop();
-
-    const interval = window.setInterval(() => {
-      if (statusRef.current !== 'playing') {
-        return;
-      }
-      const dt = 1 / engine.tickRate;
-      const { eliminations } = engine.update(dt);
-      offlineTickCountRef.current += 1;
-      const snapshot = buildOfflineSnapshot(engine, offlineTickCountRef.current, false, false);
-      handleSnapshot(snapshot);
-
-      for (const elimination of eliminations) {
-        if (elimination.playerId === playerIdRef.current) {
-          applyElimination({
-            reason: elimination.reason,
-            size_score: Math.floor(elimination.mass),
-            multiplier: resolveMultiplier(Math.floor(elimination.mass)),
-          });
-        }
-      }
-    }, Math.round(1000 / engine.tickRate));
-    offlineTickRef.current = interval;
   };
 
   const stopOffline = (): void => {
-    if (offlineTickRef.current) {
-      window.clearInterval(offlineTickRef.current);
-      offlineTickRef.current = null;
-    }
     offlineEngineRef.current = null;
+  };
+
+  const runOfflineTick = (): void => {
+    const engine = offlineEngineRef.current;
+    if (!engine || statusRef.current !== 'playing') {
+      return;
+    }
+    const dt = 1 / engine.tickRate;
+    const { eliminations } = engine.update(dt);
+    offlineTickCountRef.current += 1;
+    const snapshot = buildOfflineSnapshot(
+      engine,
+      offlineTickCountRef.current,
+      false,
+      false,
+      OFFLINE_SNAPSHOT_POINTS,
+    );
+    handleSnapshot(snapshot);
+
+    for (const elimination of eliminations) {
+      if (elimination.playerId === playerIdRef.current) {
+        applyElimination({
+          reason: elimination.reason,
+          size_score: Math.floor(elimination.mass),
+          multiplier: resolveMultiplier(Math.floor(elimination.mass)),
+        });
+      }
+    }
   };
 
   const handleMessage = (type: string, payload?: unknown): void => {
     switch (type) {
       case 'WELCOME': {
-        const data = payload as { player_id?: string };
+        const data = payload as { player_id?: string; snapshot_rate?: number };
         if (data?.player_id) {
           playerIdRef.current = data.player_id;
+        }
+        if (data?.snapshot_rate && data.snapshot_rate > 0) {
+          NET.interpDelayMs = Math.max(80, Math.round((1000 / data.snapshot_rate) * 1.6));
         }
         break;
       }
@@ -405,11 +452,10 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     setCashoutPending(false);
   };
 
-  const applyElimination = (data: EliminatedPayload): void => {
+  const applyElimination = (data: EliminatedPayloadExtended): void => {
     if (statusRef.current !== 'playing') {
       return;
     }
-    const extended = data as EliminatedPayloadExtended;
     setEliminationReason(data?.reason ?? 'eliminated');
     setStatus('ended');
     setRunResult({
@@ -417,10 +463,10 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       stake: Number.isFinite(stakeCents) ? stakeCents : null,
       payout: null,
       multiplier:
-        resolveOptionalNumber(extended?.multiplier) ??
+        resolveOptionalNumber(data?.multiplier) ??
         lastKnownMultiplierRef.current ??
         null,
-      finalLength: resolveFinalLength(extended, lastKnownLengthRef.current),
+      finalLength: resolveFinalLength(data, lastKnownLengthRef.current),
     });
     overlayOpenRef.current = true;
     setOverlayOpen(true);
@@ -430,10 +476,10 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
         runId: runIdRef.current,
         reason: data?.reason ?? 'eliminated',
         multiplier:
-          resolveOptionalNumber(extended?.multiplier) ??
+          resolveOptionalNumber(data?.multiplier) ??
           lastKnownMultiplierRef.current ??
           undefined,
-        sizeScore: resolveOptionalNumber(extended?.size_score) ?? lastKnownLengthRef.current ?? undefined,
+        sizeScore: resolveOptionalNumber(data?.size_score) ?? lastKnownLengthRef.current ?? undefined,
       }).catch(() => {
         setCashoutResult('Falha ao registrar eliminacao');
       });
@@ -442,6 +488,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
 
   const handleSnapshot = (snapshot: SnapshotPayload): void => {
     const state = stateRef.current;
+    const snapNow = performance.now();
     if (snapshot.world_radius) {
       state.worldRadius = snapshot.world_radius;
     }
@@ -484,11 +531,27 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     snapshot.players.forEach((player) => {
       seen.add(player.id);
       const entry = state.snakes.get(player.id);
-      const segments = player.segments ?? [];
-      const points = toFlatPoints(segments);
+      const rawPoints = toFlatPoints(player.segments ?? []);
+      const points = rawPoints.length >= 4 ? rawPoints : null;
       const hue = player.hue ?? 0;
       const radius = player.radius ?? 10;
+      const snapshotEntry: SnakeSnapshot = {
+        t: snapNow,
+        x: player.x,
+        y: player.y,
+        a: player.angle ?? 0,
+        b: player.boost,
+        m: player.size_score,
+        r: radius,
+        h: hue,
+        p: points,
+      };
+
       if (!entry) {
+        const seedPoints = points ?? [player.x, player.y, player.x, player.y];
+        if (!snapshotEntry.p) {
+          snapshotEntry.p = seedPoints;
+        }
         state.snakes.set(player.id, {
           id: player.id,
           x: player.x,
@@ -498,17 +561,36 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
           m: player.size_score,
           r: radius,
           h: hue,
-          p: points,
+          p: snapshotEntry.p,
+          prevSnap: snapshotEntry,
+          nextSnap: snapshotEntry,
+          lastFullPoints: seedPoints,
+          lastFullX: player.x,
+          lastFullY: player.y,
+          renderPoints: null,
+          rp: snapshotEntry.p,
+          rx: player.x,
+          ry: player.y,
+          ra: player.angle ?? 0,
+          rr: radius,
+          rm: player.size_score,
         });
       } else {
         entry.x = player.x;
         entry.y = player.y;
-        entry.a = player.angle ?? entry.a;
+        entry.a = snapshotEntry.a;
         entry.b = player.boost;
         entry.m = player.size_score;
         entry.r = radius;
         entry.h = hue;
-        entry.p = points;
+        entry.prevSnap = entry.nextSnap ?? snapshotEntry;
+        entry.nextSnap = snapshotEntry;
+        entry.p = points ?? entry.p;
+        if (points) {
+          entry.lastFullPoints = points;
+          entry.lastFullX = player.x;
+          entry.lastFullY = player.y;
+        }
       }
     });
 
@@ -522,26 +604,33 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     for (const snake of state.snakes.values()) {
       state.drawSnakes.push(snake);
     }
-    state.drawSnakes.sort((a, b) => a.m - b.m);
+    state.drawSnakes.sort((a, b) => (a.nextSnap?.m ?? a.m) - (b.nextSnap?.m ?? b.m));
 
-    updateHud(snapshot);
+    updateHud(snapshot, snapNow);
   };
 
-  const updateHud = (snapshot: SnapshotPayload): void => {
+  const updateHud = (snapshot: SnapshotPayload, now: number): void => {
     const entries = [...snapshot.players].sort((a, b) => b.size_score - a.size_score);
     const me = snapshot.players.find((player) => player.id === playerIdRef.current);
     if (me) {
       const rankIndex = entries.findIndex((player) => player.id === me.id);
-      setStats({
-        size: me.size_score,
-        multiplier: me.multiplier,
-        rank: rankIndex >= 0 ? `${rankIndex + 1}` : '-',
-      });
+      const rank = rankIndex >= 0 ? `${rankIndex + 1}` : '-';
+      const shouldRefreshStats =
+        now - lastStatsRef.current >= 1000 / 12 ||
+        me.size_score !== lastKnownLengthRef.current ||
+        me.multiplier !== lastKnownMultiplierRef.current;
+      if (shouldRefreshStats) {
+        setStats({
+          size: me.size_score,
+          multiplier: me.multiplier,
+          rank,
+        });
+        lastStatsRef.current = now;
+      }
       lastKnownLengthRef.current = me.size_score;
       lastKnownMultiplierRef.current = me.multiplier;
     }
 
-    const now = performance.now();
     if (now - lastLeaderboardRef.current < 1000 / PERF.leaderboardHz) {
       return;
     }
@@ -737,11 +826,13 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     overlayOpenRef.current = true;
     setOverlayOpen(true);
     setStatus('ended');
-    const canReportCashout = OFFLINE_MODE && !!runIdRef.current && fallbackMultiplier !== null;
+    const reportRunId = runIdRef.current;
+    const canReportCashout =
+      OFFLINE_MODE && typeof reportRunId === 'string' && fallbackMultiplier !== null;
     setCashoutPending(canReportCashout);
     if (canReportCashout) {
       void reportRunCashout({
-        runId: runIdRef.current,
+        runId: reportRunId,
         multiplier: fallbackMultiplier,
         sizeScore: fallbackLength ?? undefined,
       })
@@ -839,6 +930,8 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   };
 
   const startRenderLoop = (): void => {
+    frameRef.current.last = 0;
+    frameRef.current.acc = 0;
     const render = (time: number) => {
       const frame = frameRef.current;
       if (!frame.last) {
@@ -849,11 +942,20 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
         dt = 100;
       }
       frame.last = time;
-      frame.acc += dt;
-      while (frame.acc >= frame.step) {
-        frame.acc -= frame.step;
+
+      if (OFFLINE_MODE) {
+        frame.acc += dt;
+        let steps = 0;
+        while (frame.acc >= frame.step && steps < 5) {
+          frame.acc -= frame.step;
+          runOfflineTick();
+          steps += 1;
+        }
+        if (steps >= 5) {
+          frame.acc = 0;
+        }
       }
-      draw(time);
+      draw(time, dt);
       animationRef.current = requestAnimationFrame(render);
     };
     animationRef.current = requestAnimationFrame(render);
@@ -866,27 +968,29 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     }
   };
 
-  const draw = (now: number): void => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-    const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
+  const draw = (now: number, frameDtMs: number): void => {
+    const context = contextRef.current;
     if (!context) {
       return;
     }
+    const dtSec = clamp(frameDtMs / 1000, 0.001, 0.05);
     const view = viewRef.current;
     const state = stateRef.current;
-    const me = playerIdRef.current ? state.snakes.get(playerIdRef.current) : undefined;
+    const renderNow = now - NET.interpDelayMs;
+    const meRaw = playerIdRef.current ? state.snakes.get(playerIdRef.current) : undefined;
+    const me = meRaw ? getInterpolatedSnake(meRaw, renderNow, NET.maxExtrapMs) : null;
 
     if (me) {
-      const camLerp = me.b ? 0.22 : 0.38;
-      view.camX += (me.x - view.camX) * camLerp;
-      view.camY += (me.y - view.camY) * camLerp;
-      const dyn = clamp(1 / (1 + me.m / 260), 0.35, 1.0);
-      view.scale = dyn * inputRef.current.zoom;
+      const camLerp = 1 - Math.exp(-dtSec * (me.b ? 9.6 : 13.8));
+      view.camX += (me.rx - view.camX) * camLerp;
+      view.camY += (me.ry - view.camY) * camLerp;
+      const dyn = clamp(1 / (1 + me.rm / 260), 0.35, 1.0);
+      const zoomTarget = dyn * inputRef.current.zoom;
+      const zoomLerp = 1 - Math.exp(-dtSec * 8.2);
+      view.scale += (zoomTarget - view.scale) * zoomLerp;
     } else {
-      view.scale = inputRef.current.zoom;
+      const zoomLerp = 1 - Math.exp(-dtSec * 8.2);
+      view.scale += (inputRef.current.zoom - view.scale) * zoomLerp;
     }
 
     const pattern = gridPatternRef.current ?? createGridPattern(context);
@@ -914,7 +1018,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
 
     drawWorldBorder(context, state.worldRadius);
     drawPellets(context, state, view, sprites);
-    drawSnakes(context, state, view, me?.id);
+    drawSnakes(context, state, view, me?.id, renderNow);
   };
 
   const startCashoutCountdown = (): void => {
@@ -1037,6 +1141,13 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
       view.dpr = Math.min(PERF.maxDpr, window.devicePixelRatio || 1);
       canvas.width = Math.floor(view.vw * view.dpr);
       canvas.height = Math.floor(view.vh * view.dpr);
+      const context =
+        contextRef.current ?? canvas.getContext('2d', { alpha: false, desynchronized: true });
+      if (context) {
+        contextRef.current = context;
+        context.imageSmoothingEnabled = true;
+        context.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      }
     };
 
     const observer = new ResizeObserver(resize);
@@ -1233,8 +1344,9 @@ function buildOfflineSnapshot(
   tick: number,
   includePellets: boolean,
   includeWorld: boolean,
+  maxPoints: number,
 ): SnapshotPayload {
-  const players = engine.getSnapshotPlayers().map((player) => mapOfflinePlayer(player));
+  const players = engine.getSnapshotPlayers(maxPoints).map((player) => mapOfflinePlayer(player));
   const pelletEvents = mapOfflinePelletEvents(engine.flushPelletEvents());
 
   const snapshot: SnapshotPayload = {
@@ -1370,40 +1482,61 @@ function drawPellets(
 function drawSnakes(
   context: CanvasRenderingContext2D,
   state: { drawSnakes: SnakeEntry[] },
-  view: { dpr: number; vw: number; vh: number; camX: number; camY: number; scale: number },
+  view: { scale: number; camX: number; camY: number },
   selfId?: string,
+  renderNow?: number,
 ): void {
+  const renderTime = typeof renderNow === 'number' ? renderNow : performance.now();
   for (const snake of state.drawSnakes) {
-    const pts = snake.p;
+    const rs = getInterpolatedSnake(snake, renderTime, NET.maxExtrapMs);
+    if (!rs) {
+      continue;
+    }
+    const pts = rs.rp;
     if (!pts || pts.length < 4) {
       continue;
     }
-    context.strokeStyle = `hsl(${snake.h}, 90%, 58%)`;
+
+    const dxCam = rs.rx - view.camX;
+    const dyCam = rs.ry - view.camY;
+    const dist2Cam = dxCam * dxCam + dyCam * dyCam;
+    let pointStep = 1;
+    if (view.scale < 0.75 && pts.length > 140) {
+      pointStep = 2;
+    }
+    if (view.scale < 0.55 || dist2Cam > 1800 * 1800) {
+      pointStep = Math.max(pointStep, 3);
+    }
+    if (view.scale < 0.45 || dist2Cam > 2500 * 2500) {
+      pointStep = Math.max(pointStep, 4);
+    }
+
+    context.strokeStyle = `hsl(${rs.h}, 90%, 58%)`;
     context.lineCap = 'round';
     context.lineJoin = 'round';
-    context.lineWidth = snake.r * 2;
+    context.lineWidth = rs.rr * 2;
     context.beginPath();
     context.moveTo(pts[0], pts[1]);
-    for (let i = 2; i < pts.length; i += 2) {
+    for (let i = 2; i < pts.length; i += 2 * pointStep) {
       context.lineTo(pts[i], pts[i + 1]);
     }
     context.stroke();
 
     const hx = pts[pts.length - 2];
     const hy = pts[pts.length - 1];
-    context.fillStyle = `hsl(${snake.h}, 90%, 62%)`;
+    context.fillStyle = `hsl(${rs.h}, 90%, 62%)`;
     context.beginPath();
-    context.arc(hx, hy, snake.r * 1.05, 0, Math.PI * 2);
+    context.arc(hx, hy, rs.rr * 1.05, 0, Math.PI * 2);
     context.fill();
 
-    const ang = snake.a || 0;
+    const ang = rs.ra || 0;
     const ex = Math.cos(ang);
     const ey = Math.sin(ang);
     const px = -ey;
     const py = ex;
 
-    const eyeOff = snake.r * 0.55;
-    const eyeFwd = snake.r * 0.55;
+    const eyeOff = rs.rr * 0.55;
+    const eyeFwd = rs.rr * 0.55;
     const e1x = hx + ex * eyeFwd + px * eyeOff;
     const e1y = hy + ey * eyeFwd + py * eyeOff;
     const e2x = hx + ex * eyeFwd - px * eyeOff;
@@ -1411,25 +1544,88 @@ function drawSnakes(
 
     context.fillStyle = 'rgba(0,0,0,0.55)';
     context.beginPath();
-    context.arc(e1x, e1y, snake.r * 0.18, 0, Math.PI * 2);
-    context.arc(e2x, e2y, snake.r * 0.18, 0, Math.PI * 2);
+    context.arc(e1x, e1y, rs.rr * 0.18, 0, Math.PI * 2);
+    context.arc(e2x, e2y, rs.rr * 0.18, 0, Math.PI * 2);
     context.fill();
 
-    if (selfId && snake.id === selfId) {
-      context.setTransform(
-        view.dpr * view.scale,
-        0,
-        0,
-        view.dpr * view.scale,
-        view.dpr * (view.vw / 2 - view.camX * view.scale),
-        view.dpr * (view.vh / 2 - view.camY * view.scale),
-      );
+    if (selfId && rs.id === selfId) {
       context.fillStyle = 'rgba(255,255,255,0.8)';
-      context.font = '14px system-ui';
+      context.font = `${14 / Math.max(0.45, view.scale)}px system-ui`;
       context.textAlign = 'center';
-      context.fillText('voce', hx, hy - snake.r * 2.2);
+      context.fillText('voce', hx, hy - rs.rr * 2.2);
     }
   }
+}
+
+function getInterpolatedSnake(
+  snake: SnakeEntry,
+  renderNow: number,
+  maxExtrapMs: number,
+): SnakeEntry | null {
+  const prev = snake.prevSnap;
+  const next = snake.nextSnap;
+  if (!prev || !next) {
+    return null;
+  }
+
+  let t = 1;
+  if (next.t > prev.t) {
+    t = (renderNow - prev.t) / (next.t - prev.t);
+  }
+  const maxExtrapT = next.t > prev.t ? maxExtrapMs / (next.t - prev.t) : 0;
+  t = clamp(t, 0, 1 + maxExtrapT);
+
+  const x = lerp(prev.x, next.x, t);
+  const y = lerp(prev.y, next.y, t);
+  const a = lerpAngle(prev.a, next.a, t);
+  const m = lerp(prev.m, next.m, t);
+  const r = lerp(prev.r, next.r, t);
+
+  const prevP = prev.p;
+  const nextP = next.p;
+  let points: number[] | null = null;
+
+  if (prevP && nextP && prevP.length >= 4 && prevP.length === nextP.length) {
+    const out = ensureRenderPointBuffer(snake, prevP.length);
+    for (let i = 0; i < prevP.length; i += 1) {
+      out[i] = lerp(prevP[i], nextP[i], t);
+    }
+    points = out;
+  } else {
+    const src = (nextP && nextP.length >= 4)
+      ? nextP
+      : (prevP && prevP.length >= 4)
+        ? prevP
+        : snake.lastFullPoints;
+    if (!src || src.length < 4) {
+      return null;
+    }
+    const out = ensureRenderPointBuffer(snake, src.length);
+    const refX = src === nextP ? next.x : src === prevP ? prev.x : snake.lastFullX;
+    const refY = src === nextP ? next.y : src === prevP ? prev.y : snake.lastFullY;
+    const dx = x - refX;
+    const dy = y - refY;
+    for (let i = 0; i < src.length; i += 2) {
+      out[i] = src[i] + dx;
+      out[i + 1] = src[i + 1] + dy;
+    }
+    points = out;
+  }
+
+  snake.rx = x;
+  snake.ry = y;
+  snake.ra = a;
+  snake.rm = m;
+  snake.rr = r;
+  snake.rp = points;
+  return snake;
+}
+
+function ensureRenderPointBuffer(snake: SnakeEntry, len: number): number[] {
+  if (!snake.renderPoints || snake.renderPoints.length !== len) {
+    snake.renderPoints = new Array<number>(len);
+  }
+  return snake.renderPoints;
 }
 
 function createGridPattern(context: CanvasRenderingContext2D): CanvasPattern {
@@ -1503,6 +1699,14 @@ function toFlatPoints(points: Vector2[]): number[] {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  return a + angleDiff(a, b) * t;
 }
 
 function angleDiff(a: number, b: number): number {

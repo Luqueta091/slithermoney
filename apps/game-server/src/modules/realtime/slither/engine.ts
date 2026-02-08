@@ -333,7 +333,12 @@ export class SlitherEngine {
     return { eliminations };
   }
 
-  getSnapshotPlayers(): SlitherSnapshotPlayer[] {
+  getSnapshotPlayers(maxPoints?: number): SlitherSnapshotPlayer[] {
+    const pointsLimit = clamp(
+      Math.floor(maxPoints ?? this.maxSendPoints),
+      24,
+      this.maxSnakePoints,
+    );
     const players: SlitherSnapshotPlayer[] = [];
     for (const snake of this.snakes.values()) {
       if (!snake.alive) {
@@ -349,7 +354,7 @@ export class SlitherEngine {
         mass: snake.mass,
         radius: snake.radius,
         hue: snake.hue,
-        segments: flatToVectors(snake.points.sample(this.maxSendPoints)),
+        segments: flatToVectors(snake.points.sample(pointsLimit)),
       });
     }
     return players;
