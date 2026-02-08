@@ -22,7 +22,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: () => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<string | null>;
-  completeIdentity: (input: IdentityInput, accountIdOverride?: string | null) => Promise<void>;
+  completeIdentity: (input: IdentityInput, accountIdOverride?: string | null) => Promise<boolean>;
   signOut: () => void;
   resetError: () => void;
 };
@@ -129,11 +129,14 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     }
   };
 
-  const completeIdentity = async (input: IdentityInput, accountIdOverride?: string | null): Promise<void> => {
+  const completeIdentity = async (
+    input: IdentityInput,
+    accountIdOverride?: string | null,
+  ): Promise<boolean> => {
     const resolvedAccountId = accountIdOverride ?? accountId;
     if (!resolvedAccountId) {
       setError('Sessao invalida');
-      return;
+      return false;
     }
 
     setError(null);
@@ -142,9 +145,11 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       setIdentity(profile);
       setStatus('signedIn');
       setAccountId(resolvedAccountId);
+      return true;
     } catch (err) {
       const resolved = resolveError(err);
       setError(resolved.message);
+      return false;
     }
   };
 

@@ -46,7 +46,7 @@ export function HomeScreen(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [loadingRun, setLoadingRun] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'profile'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -54,6 +54,9 @@ export function HomeScreen(): JSX.Element {
   const [pixKeyType, setPixKeyType] = useState<PixKeyType>('email');
   const [pixKey, setPixKey] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [nicknameError, setNicknameError] = useState<string | null>(null);
+  const [nicknameSaving, setNicknameSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
 
@@ -128,6 +131,12 @@ export function HomeScreen(): JSX.Element {
       }
     }
   }, [identity, pixKey, pixKeyType]);
+
+  useEffect(() => {
+    if (identity?.full_name) {
+      setNicknameDraft(identity.full_name);
+    }
+  }, [identity?.full_name]);
 
   const featuredStakes = useMemo(() => pickFeaturedStakes(stakes), [stakes]);
 
@@ -262,7 +271,76 @@ export function HomeScreen(): JSX.Element {
     return (
       <div className="auth-overlay">
         <div className="auth-card">
-          {authMode === 'signup' ? (
+          {authMode === 'profile' ? (
+            <>
+              <div className="hero">
+                <p className="kicker">Perfil</p>
+                <h2 className="title">Editar nickname</h2>
+                <p className="subtitle">Altere o nome exibido na home.</p>
+              </div>
+              <div className="card">
+                <InputField
+                  label="Nickname"
+                  value={nicknameDraft}
+                  onChange={(value) => {
+                    auth.resetError();
+                    setNicknameError(null);
+                    setNicknameDraft(value);
+                  }}
+                  placeholder="Seu nickname"
+                />
+                {nicknameError ? <p className="error">{nicknameError}</p> : null}
+                {auth.error ? <p className="error">{auth.error}</p> : null}
+              </div>
+              <div className="actions">
+                <ActionButton
+                  label={nicknameSaving ? 'Salvando...' : 'Salvar nickname'}
+                  disabled={nicknameSaving}
+                  onClick={async () => {
+                    if (!signedIn || !identity) {
+                      setNicknameError('Sessao invalida');
+                      return;
+                    }
+
+                    const nextName = nicknameDraft.trim();
+                    if (!nextName) {
+                      setNicknameError('Informe um nickname valido');
+                      return;
+                    }
+
+                    const pixType = normalizePixKeyType(identity.pix_key_type);
+                    if (!pixType) {
+                      setNicknameError('Tipo de chave Pix invalido no perfil');
+                      return;
+                    }
+
+                    auth.resetError();
+                    setNicknameError(null);
+                    setNicknameSaving(true);
+                    const success = await auth.completeIdentity({
+                      fullName: nextName,
+                      cpf: sanitizeCpf(identity.cpf),
+                      pixKey: identity.pix_key,
+                      pixKeyType: pixType,
+                    });
+                    setNicknameSaving(false);
+                    if (success) {
+                      setAuthOpen(false);
+                    }
+                  }}
+                />
+                <ActionButton
+                  label="Cancelar"
+                  variant="ghost"
+                  onClick={() => {
+                    auth.resetError();
+                    setNicknameError(null);
+                    setAuthOpen(false);
+                  }}
+                />
+              </div>
+            </>
+          ) : authMode === 'signup' ? (
             <IdentityScreen
               accountId={accountId}
               email={email}
@@ -426,6 +504,13 @@ export function HomeScreen(): JSX.Element {
                 type="button"
                 className="home-player-name"
                 onClick={() => {
+                  if (signedIn) {
+                    auth.resetError();
+                    setNicknameError(null);
+                    setAuthMode('profile');
+                    setAuthOpen(true);
+                    return;
+                  }
                   setAuthOpen(true);
                   setAuthMode(needsIdentity ? 'signup' : 'login');
                 }}
@@ -436,6 +521,13 @@ export function HomeScreen(): JSX.Element {
                 type="button"
                 className="home-player-edit"
                 onClick={() => {
+                  if (signedIn) {
+                    auth.resetError();
+                    setNicknameError(null);
+                    setAuthMode('profile');
+                    setAuthOpen(true);
+                    return;
+                  }
                   setAuthOpen(true);
                   setAuthMode(needsIdentity ? 'signup' : 'login');
                 }}
@@ -574,6 +666,13 @@ function formatStakeLabel(stake: Stake): string {
     return `$${value.toFixed(0)}`;
   }
   return `$${value.toFixed(2)}`;
+}
+
+function normalizePixKeyType(value: string): PixKeyType | null {
+  if (value === 'cpf' || value === 'phone' || value === 'email' || value === 'random') {
+    return value;
+  }
+  return null;
 }
 
 function parseAmountToCents(value: string): number | null {
