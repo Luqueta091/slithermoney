@@ -118,6 +118,7 @@ const NET = {
   interpDelayMs: 96,
   maxExtrapMs: 80,
 };
+const MOBILE_ZOOM_OUT_FACTOR = 0.82;
 
 export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -986,18 +987,19 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     const renderNow = now - NET.interpDelayMs;
     const meRaw = playerIdRef.current ? state.snakes.get(playerIdRef.current) : undefined;
     const me = meRaw ? getInterpolatedSnake(meRaw, renderNow, NET.maxExtrapMs) : null;
+    const baseZoom = inputRef.current.zoom * (isMobile ? MOBILE_ZOOM_OUT_FACTOR : 1);
 
     if (me) {
       const camLerp = 1 - Math.exp(-dtSec * (me.b ? 9.6 : 13.8));
       view.camX += (me.rx - view.camX) * camLerp;
       view.camY += (me.ry - view.camY) * camLerp;
       const dyn = clamp(1 / (1 + me.rm / 260), 0.35, 1.0);
-      const zoomTarget = dyn * inputRef.current.zoom;
+      const zoomTarget = dyn * baseZoom;
       const zoomLerp = 1 - Math.exp(-dtSec * 8.2);
       view.scale += (zoomTarget - view.scale) * zoomLerp;
     } else {
       const zoomLerp = 1 - Math.exp(-dtSec * 8.2);
-      view.scale += (inputRef.current.zoom - view.scale) * zoomLerp;
+      view.scale += (baseZoom - view.scale) * zoomLerp;
     }
 
     const pattern = gridPatternRef.current ?? createGridPattern(context);
@@ -1238,23 +1240,25 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
           </div>
         </div>
 
-        <div className="game-overlay game-stats">
-          <div className="game-panel">
-            <div className="game-panel__title">Seu status</div>
-            <div className="game-panel__line">
-              <span>Comprimento</span>
-              <strong>{stats.size}</strong>
-            </div>
-            <div className="game-panel__line">
-              <span>Multiplicador</span>
-              <strong>{stats.multiplier.toFixed(2)}x</strong>
-            </div>
-            <div className="game-panel__line">
-              <span>Classificacao</span>
-              <strong>{stats.rank}</strong>
+        {!isMobile ? (
+          <div className="game-overlay game-stats">
+            <div className="game-panel">
+              <div className="game-panel__title">Seu status</div>
+              <div className="game-panel__line">
+                <span>Comprimento</span>
+                <strong>{stats.size}</strong>
+              </div>
+              <div className="game-panel__line">
+                <span>Multiplicador</span>
+                <strong>{stats.multiplier.toFixed(2)}x</strong>
+              </div>
+              <div className="game-panel__line">
+                <span>Classificacao</span>
+                <strong>{stats.rank}</strong>
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="game-overlay game-earnings">
           <div className="earnings-card">

@@ -746,12 +746,109 @@ body.game-playing #root {
 }
 
 @media (max-width: 720px) {
-  .game-leaderboard {
-    width: 170px;
+  .game-overlay {
+    font-size: 10px;
   }
 
-  .game-stats {
-    width: 180px;
+  .game-panel {
+    border-radius: 10px;
+    padding: 7px 9px;
+  }
+
+  .game-panel__title {
+    margin-bottom: 4px;
+    font-size: 9px;
+    letter-spacing: 0.8px;
+  }
+
+  .game-panel__value {
+    font-size: 11px;
+  }
+
+  .game-panel__line {
+    gap: 8px;
+    font-size: 10px;
+  }
+
+  .game-alerts {
+    top: 10px;
+    left: 10px;
+    width: 140px;
+    gap: 6px;
+  }
+
+  .game-leaderboard {
+    top: 10px;
+    right: 10px;
+    width: 150px;
+  }
+
+  .game-leaderboard ol {
+    gap: 4px;
+  }
+
+  .game-leaderboard li {
+    gap: 4px;
+    font-size: 10px;
+  }
+
+  .game-leaderboard .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .game-earnings {
+    bottom: 72px;
+  }
+
+  .earnings-card {
+    min-width: 164px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    box-shadow: 0 12px 24px rgba(0, 255, 153, 0.2);
+  }
+
+  .earnings-label {
+    font-size: 9px;
+    letter-spacing: 1.2px;
+  }
+
+  .earnings-value {
+    font-size: 16px;
+  }
+
+  .earnings-meta {
+    font-size: 10px;
+  }
+
+  .game-controls-mobile {
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-joystick {
+    width: 120px;
+    height: 120px;
+  }
+
+  .mobile-joystick__base {
+    width: 102px;
+    height: 102px;
+  }
+
+  .mobile-joystick__stick {
+    width: 42px;
+    height: 42px;
+  }
+
+  .mobile-buttons {
+    gap: 8px;
+  }
+
+  .mobile-button {
+    min-width: 98px;
+    padding: 8px 12px;
+    font-size: 11px;
   }
 
   .game-minimap__frame {
