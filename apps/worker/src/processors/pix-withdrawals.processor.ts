@@ -261,26 +261,42 @@ async function executePayout(withdrawal: {
 
   const amount = Number((Number(withdrawal.amountCents) / 100).toFixed(2));
   const payerName = resolveCreditPartyName(account.displayName, account.email);
-  const result = await createBspayPayment(
-    {
-      baseUrl: config.BSPAY_BASE_URL,
-      token: config.BSPAY_TOKEN,
-      clientId: config.BSPAY_CLIENT_ID,
-      clientSecret: config.BSPAY_CLIENT_SECRET,
-    },
-    {
-      amount,
-      externalId: withdrawal.idempotencyKey,
-      description: 'Saque de saldo',
-      postbackUrl: config.BSPAY_POSTBACK_URL || undefined,
-      creditParty: {
-        name: payerName,
-        keyType: 'CPF',
-        key: sanitizedCpfKey,
-        taxId: sanitizedCpfKey,
+  let result: Awaited<ReturnType<typeof createBspayPayment>>;
+  try {
+    result = await createBspayPayment(
+      {
+        baseUrl: config.BSPAY_BASE_URL,
+        token: config.BSPAY_TOKEN,
+        clientId: config.BSPAY_CLIENT_ID,
+        clientSecret: config.BSPAY_CLIENT_SECRET,
       },
-    },
-  );
+      {
+        amount,
+        externalId: withdrawal.idempotencyKey,
+        description: 'Saque de saldo',
+        postbackUrl: config.BSPAY_POSTBACK_URL || undefined,
+        creditParty: {
+          name: payerName,
+          keyType: 'CPF',
+          key: sanitizedCpfKey,
+          taxId: sanitizedCpfKey,
+        },
+      },
+    );
+  } catch (error) {
+    const bspayStatus = parseBspayErrorStatusCode(error);
+    if (bspayStatus === 406) {
+      logger.warn('pix_withdrawal_rejected_by_provider', {
+        withdrawal_id: withdrawal.id,
+        account_id: withdrawal.accountId,
+        provider_status_code: bspayStatus,
+        reason: error instanceof Error ? error.message : 'unknown_error',
+      });
+      return { status: 'FAILED' };
+    }
+
+    throw error;
+  }
 
   return {
     status: 'PROCESSING',
@@ -331,4 +347,17 @@ function calculateCpfCheckDigit(numbers: number[], weightStart: number): number 
   const sum = numbers.reduce((acc, digit, index) => acc + digit * (weightStart - index), 0);
   const remainder = (sum * 10) % 11;
   return remainder === 10 ? 0 : remainder;
+}
+
+function parseBspayErrorStatusCode(error: unknown): number | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const match = error.message.match(/BSPAY payment failed:\s*(\d{3})\b/);
+  if (!match) {
+    return null;
+  }
+
+  return Number.parseInt(match[1], 10);
 }
