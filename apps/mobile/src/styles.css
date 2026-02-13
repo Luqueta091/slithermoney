@@ -1159,6 +1159,10 @@ body.game-playing #root {
   text-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
 }
 
+.home-brand-highlight {
+  color: #f8cc46;
+}
+
 .home-grid {
   display: grid;
   gap: 16px;

@@ -400,7 +400,9 @@ export function HomeScreen(): JSX.Element {
 
       <main className="home-shell">
         <header className="home-header">
-          <h1 className="home-brand">Slithermoney</h1>
+          <h1 className="home-brand">
+            Slither<span className="home-brand-highlight">Money</span>
+          </h1>
         </header>
 
         <section className="home-grid">
