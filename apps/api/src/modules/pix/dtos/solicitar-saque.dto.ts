@@ -5,7 +5,7 @@ export const solicitarSaqueInputSchema = z.object({
   amountCents: z.number().int().positive(),
   currency: z.string().length(3).optional(),
   pixKey: z.string().min(3),
-  pixKeyType: z.enum(['cpf', 'phone', 'email', 'random']),
+  pixKeyType: z.literal('cpf').optional().default('cpf'),
 });
 
 export type SolicitarSaqueInput = z.infer<typeof solicitarSaqueInputSchema>;

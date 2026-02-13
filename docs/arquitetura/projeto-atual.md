@@ -4,7 +4,7 @@
 Projeto em monorepo Node/TypeScript com 5 apps e 3 packages. O jogo e realtime (WebSocket) e a camada financeira roda em API HTTP + worker.
 
 ## Estrutura do monorepo
-- apps/api: API HTTP (identidade, carteira, ledger, Pix, runs, stakes)
+- apps/api: API HTTP (auth, profile, identidade legado, carteira, ledger, Pix, runs, stakes)
 - apps/game-server: servidor realtime (WebSocket) + health/metrics HTTP
 - apps/worker: jobs Pix (saques, expiracao, reconciliacao)
 - apps/backoffice: API admin (dashboard, usuarios, pix, ledger, runs)
@@ -37,6 +37,10 @@ Endpoints:
 - GET `/` -> health simples
 - GET `/health` -> status + versao
 - GET `/metrics` -> metricas
+- POST `/auth/signup` -> cria conta com email/senha
+- POST `/auth/login` -> login com email/senha
+- GET `/profile/me` -> perfil atual (email/display_name)
+- PATCH `/profile/me` -> atualiza nickname (display_name)
 - POST `/identity` -> cria/atualiza identidade (cpf/pix)
 - GET `/identity/me` -> identidade do usuario
 - GET `/wallet/me` -> saldo agregado
@@ -97,7 +101,7 @@ Endpoints:
 
 ## Banco de dados (prisma)
 Principais tabelas:
-- accounts, identity_profiles
+- accounts (email/senha/display_name), identity_profiles (legado)
 - wallets, ledger_entries
 - pix_transactions
 - runs, arenas

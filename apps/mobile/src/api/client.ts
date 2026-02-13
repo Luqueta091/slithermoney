@@ -50,23 +50,12 @@ export async function apiRequest<T>(
   return payload as T;
 }
 
-export type IdentityProfile = {
-  id: string;
+export type Profile = {
   account_id: string;
-  full_name: string;
-  cpf: string;
-  pix_key: string;
-  pix_key_type: string;
-  status: string;
+  email: string | null;
+  display_name: string | null;
   created_at: string;
   updated_at: string;
-};
-
-export type IdentityInput = {
-  fullName: string;
-  cpf: string;
-  pixKey: string;
-  pixKeyType: 'cpf' | 'phone' | 'email' | 'random';
 };
 
 export type Wallet = {
@@ -185,8 +174,22 @@ export type AuthResponse = {
   account_id: string;
 };
 
-export async function getIdentity(accountId: string): Promise<IdentityProfile> {
-  return apiRequest<IdentityProfile>('/identity/me', { method: 'GET' }, accountId);
+export async function getProfile(accountId: string): Promise<Profile> {
+  return apiRequest<Profile>('/profile/me', { method: 'GET' }, accountId);
+}
+
+export async function updateProfile(
+  accountId: string,
+  input: { displayName: string },
+): Promise<Profile> {
+  return apiRequest<Profile>(
+    '/profile/me',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    },
+    accountId,
+  );
 }
 
 export async function signup(email: string, password: string): Promise<AuthResponse> {
@@ -201,20 +204,6 @@ export async function login(email: string, password: string): Promise<AuthRespon
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-}
-
-export async function upsertIdentity(
-  accountId: string,
-  input: IdentityInput,
-): Promise<IdentityProfile> {
-  return apiRequest<IdentityProfile>(
-    '/identity',
-    {
-      method: 'POST',
-      body: JSON.stringify(input),
-    },
-    accountId,
-  );
 }
 
 export async function getWallet(accountId: string): Promise<Wallet> {
@@ -337,7 +326,7 @@ export async function listPixTransactions(
 export async function requestWithdrawal(
   accountId: string,
   amountCents: number,
-  input: { pixKey: string; pixKeyType: 'cpf' | 'phone' | 'email' | 'random' },
+  input: { pixKey: string; pixKeyType?: 'cpf' },
 ): Promise<PixWithdrawalResponse> {
   return apiRequest<PixWithdrawalResponse>(
     '/pix/withdrawals',
@@ -346,7 +335,7 @@ export async function requestWithdrawal(
       body: JSON.stringify({
         amountCents,
         pixKey: input.pixKey,
-        pixKeyType: input.pixKeyType,
+        pixKeyType: input.pixKeyType ?? 'cpf',
       }),
     },
     accountId,

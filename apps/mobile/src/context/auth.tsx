@@ -1,28 +1,25 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import {
   ApiError,
-  getIdentity,
+  getProfile,
   login,
   signup,
-  type IdentityInput,
-  type IdentityProfile,
-  upsertIdentity,
+  type Profile,
+  updateProfile,
 } from '../api/client';
 import { clearSession, loadSession, saveSession } from '../storage/session';
-import { generateAccountId } from '../utils/uuid';
 import { isEmail } from '../utils/validation';
 
-type AuthStatus = 'loading' | 'signedOut' | 'needsIdentity' | 'signedIn';
+type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 
 type AuthContextValue = {
   status: AuthStatus;
   accountId: string | null;
-  identity: IdentityProfile | null;
+  profile: Profile | null;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: () => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<string | null>;
-  completeIdentity: (input: IdentityInput, accountIdOverride?: string | null) => Promise<boolean>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<boolean>;
   signOut: () => void;
   resetError: () => void;
 };
@@ -32,7 +29,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [accountId, setAccountId] = useState<string | null>(null);
-  const [identity, setIdentity] = useState<IdentityProfile | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,26 +44,20 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     }
 
     setAccountId(stored);
-    void refreshIdentity(stored);
+    void refreshProfile(stored);
   };
 
-  const refreshIdentity = async (id: string): Promise<void> => {
+  const refreshProfile = async (id: string): Promise<void> => {
     try {
-      const profile = await getIdentity(id);
-      setIdentity(profile);
+      const nextProfile = await getProfile(id);
+      setProfile(nextProfile);
       setStatus('signedIn');
     } catch (err) {
       const resolved = resolveError(err);
-      if (resolved.code === 'identity_not_found') {
-        setIdentity(null);
-        setError('Complete seu cadastro para continuar.');
-        setStatus('needsIdentity');
-        return;
-      }
-
       setError(resolved.message);
       clearSession();
       setAccountId(null);
+      setProfile(null);
       setStatus('signedOut');
     }
   };
@@ -87,64 +78,46 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const response = await login(trimmedEmail, password);
       saveSession(response.account_id);
       setAccountId(response.account_id);
-      await refreshIdentity(response.account_id);
+      await refreshProfile(response.account_id);
     } catch (err) {
       const resolved = resolveError(err);
       setError(resolved.message);
     }
   };
 
-  const signUp = async (): Promise<void> => {
-    setError(null);
-    const newId = generateAccountId();
-    saveSession(newId);
-    setAccountId(newId);
-    setIdentity(null);
-    setStatus('needsIdentity');
-  };
-
-  const signUpWithEmail = async (email: string, password: string): Promise<string | null> => {
+  const signUpWithEmail = async (email: string, password: string): Promise<void> => {
     setError(null);
     const trimmedEmail = email.trim();
     if (!isEmail(trimmedEmail)) {
       setError('Email invalido');
-      return null;
+      return;
     }
     if (password.trim().length < 4) {
       setError('Senha invalida');
-      return null;
+      return;
     }
 
     try {
       const response = await signup(trimmedEmail, password);
       saveSession(response.account_id);
       setAccountId(response.account_id);
-      setIdentity(null);
-      setStatus('needsIdentity');
-      return response.account_id;
+      await refreshProfile(response.account_id);
     } catch (err) {
       const resolved = resolveError(err);
       setError(resolved.message);
-      return null;
     }
   };
 
-  const completeIdentity = async (
-    input: IdentityInput,
-    accountIdOverride?: string | null,
-  ): Promise<boolean> => {
-    const resolvedAccountId = accountIdOverride ?? accountId;
-    if (!resolvedAccountId) {
+  const updateDisplayName = async (displayName: string): Promise<boolean> => {
+    if (!accountId) {
       setError('Sessao invalida');
       return false;
     }
 
     setError(null);
     try {
-      const profile = await upsertIdentity(resolvedAccountId, input);
-      setIdentity(profile);
-      setStatus('signedIn');
-      setAccountId(resolvedAccountId);
+      const next = await updateProfile(accountId, { displayName: displayName.trim() });
+      setProfile(next);
       return true;
     } catch (err) {
       const resolved = resolveError(err);
@@ -156,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   const signOut = (): void => {
     clearSession();
     setAccountId(null);
-    setIdentity(null);
+    setProfile(null);
     setStatus('signedOut');
   };
 
@@ -169,12 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       value={{
         status,
         accountId,
-        identity,
+        profile,
         error,
         signIn,
-        signUp,
         signUpWithEmail,
-        completeIdentity,
+        updateDisplayName,
         signOut,
         resetError,
       }}

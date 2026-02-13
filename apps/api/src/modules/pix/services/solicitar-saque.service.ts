@@ -5,7 +5,7 @@ import { HttpError } from '../../../shared/http/http-error';
 import { recordPixWithdrawalRequested } from '../../../shared/observability/metrics';
 import { CarteirasRepository } from '../../carteiras/repository/carteiras.repository';
 import { LedgerService } from '../../ledger/services/ledger.service';
-import { parsePixKey, type PixKeyType } from '../../identidade/domain/value-objects/pix-key.vo';
+import { parseCpf } from '../../identidade/domain/value-objects/cpf.vo';
 import { SolicitarSaqueInput } from '../dtos/solicitar-saque.dto';
 import { PixTransacoesRepository, PixTransactionRecord } from '../repository/pix-transacoes.repository';
 
@@ -27,8 +27,8 @@ export class SolicitarSaqueService {
     const amount = BigInt(amountCents);
     const currency = normalizeCurrency(input.currency);
     const resolvedKey = idempotencyKey ?? randomUUID();
-    const pixKeyType = input.pixKeyType as PixKeyType;
-    const pixKey = parsePixKey(input.pixKey, pixKeyType);
+    const pixKeyType = 'cpf';
+    const pixKey = parseCpf(input.pixKey);
 
     await assertRolloverSatisfied(this.prisma, accountId, amountCents);
 
@@ -132,7 +132,7 @@ function assertSameRequest(
   amountCents: bigint,
   currency: string,
   pixKey: string,
-  pixKeyType: PixKeyType,
+  pixKeyType: string,
 ): void {
   if (existing.accountId !== accountId) {
     throw new HttpError(409, 'idempotency_conflict', 'Chave de idempotencia ja usada');

@@ -1,41 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ActionButton } from '../components/ActionButton';
 import { InputField } from '../components/InputField';
 import { listPixTransactions, requestWithdrawal } from '../api/client';
 import { formatCents } from '../utils/format';
-import { PIX_KEY_TYPES, type PixKeyType, pixKeyHelper, pixKeyPlaceholder } from '../utils/pixKey';
+import { sanitizeCpf } from '../utils/validation';
 
 const WITHDRAW_STATUS_FINAL = new Set(['PAID', 'FAILED']);
 
 type WithdrawScreenProps = {
   accountId: string;
   onUpdated: () => void;
-  pixKey: string;
-  pixKeyType: PixKeyType;
 };
 
-export function WithdrawScreen({
-  accountId,
-  onUpdated,
-  pixKey,
-  pixKeyType,
-}: WithdrawScreenProps): JSX.Element {
-  const [pixKeyValue, setPixKeyValue] = useState(pixKey);
-  const [pixKeyKind, setPixKeyKind] = useState<PixKeyType>(pixKeyType);
+export function WithdrawScreen({ accountId, onUpdated }: WithdrawScreenProps): JSX.Element {
+  const [pixKeyValue, setPixKeyValue] = useState('');
   const [amount, setAmount] = useState('');
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [requestedCents, setRequestedCents] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    setPixKeyValue(pixKey);
-  }, [pixKey]);
-
-  useEffect(() => {
-    setPixKeyKind(pixKeyType);
-  }, [pixKeyType]);
 
   const handleRequest = async (): Promise<void> => {
     const cents = parseAmountToCents(amount);
@@ -44,8 +28,9 @@ export function WithdrawScreen({
       return;
     }
 
-    if (!pixKeyValue.trim()) {
-      setError('Informe a chave Pix');
+    const sanitizedKey = sanitizeCpf(pixKeyValue.trim());
+    if (sanitizedKey.length !== 11) {
+      setError('Informe uma chave Pix CPF valida');
       return;
     }
 
@@ -53,8 +38,8 @@ export function WithdrawScreen({
     setIsLoading(true);
     try {
       const result = await requestWithdrawal(accountId, cents, {
-        pixKey: pixKeyValue.trim(),
-        pixKeyType: pixKeyKind,
+        pixKey: sanitizedKey,
+        pixKeyType: 'cpf',
       });
       setTransactionId(result.id);
       setStatus(result.status);
@@ -89,30 +74,15 @@ export function WithdrawScreen({
 
   return (
     <div className="card">
-      <div className="chips">
-        {PIX_KEY_TYPES.map((type) => (
-          <button
-            key={type.key}
-            type="button"
-            className={`chip ${pixKeyKind === type.key ? 'active' : ''}`}
-            onClick={() => {
-              setError(null);
-              setPixKeyKind(type.key);
-            }}
-          >
-            {type.label}
-          </button>
-        ))}
-      </div>
       <InputField
-        label="Chave Pix"
+        label="Chave Pix CPF"
         value={pixKeyValue}
         onChange={(value) => {
           setError(null);
           setPixKeyValue(value);
         }}
-        placeholder={pixKeyPlaceholder(pixKeyKind)}
-        helperText={pixKeyHelper(pixKeyKind)}
+        placeholder="000.000.000-00"
+        helperText="Use apenas chave Pix do tipo CPF para saque."
       />
       <label className="form-field">
         <span className="form-label">Valor do saque (R$)</span>

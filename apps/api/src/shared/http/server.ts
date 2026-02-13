@@ -4,6 +4,10 @@ import { config } from '../config';
 import { logger } from '../observability/logger';
 import { metrics, recordHttpRequest, setHttpInFlight } from '../observability/metrics';
 import { handleGetIdentityMe, handleUpsertIdentity } from '../../modules/identidade/controllers/identidade.controller';
+import {
+  handleGetProfileMe,
+  handleUpdateProfileMe,
+} from '../../modules/profile/controllers/profile.controller';
 import { handleGetWalletMe } from '../../modules/carteiras/controllers/wallet.controller';
 import { handleGetLedgerStatement } from '../../modules/ledger/controllers/ledger.controller';
 import { handleCreatePixDeposit } from '../../modules/pix/controllers/criar-cobranca.controller';
@@ -50,6 +54,8 @@ const routes: Record<string, Handler> = {
   'POST /auth/login': handleAuthLogin,
   'POST /identity': handleUpsertIdentity,
   'GET /identity/me': handleGetIdentityMe,
+  'GET /profile/me': handleGetProfileMe,
+  'PATCH /profile/me': handleUpdateProfileMe,
   'GET /wallet/me': handleGetWalletMe,
   'GET /ledger/me': handleGetLedgerStatement,
   'POST /pix/deposits': handleCreatePixDeposit,
@@ -65,6 +71,7 @@ const routes: Record<string, Handler> = {
 
 const rateLimitRules: Record<string, number> = {
   'POST /identity': config.RATE_LIMIT_IDENTITY_MAX,
+  'PATCH /profile/me': config.RATE_LIMIT_IDENTITY_MAX,
   'POST /pix/deposits': config.RATE_LIMIT_PIX_MAX,
   'POST /pix/withdrawals': config.RATE_LIMIT_PIX_MAX,
   'POST /pix/webhook': config.RATE_LIMIT_WEBHOOK_MAX,

@@ -10,42 +10,43 @@ export async function handleUserLookup(req: IncomingMessage, res: ServerResponse
   const auth = requireBackofficeAuth(req, 'read');
   const url = new URL(req.url ?? '/', 'http://localhost');
   const accountId = url.searchParams.get('account_id');
-  const cpfInput = url.searchParams.get('cpf');
-  const cpf = cpfInput ? sanitizeCpf(cpfInput) : undefined;
+  const emailInput = url.searchParams.get('email');
+  const email = emailInput?.trim().toLowerCase() || undefined;
 
-  if (!accountId && !cpf) {
-    throw new HttpError(400, 'missing_query', 'Informe account_id ou cpf');
+  if (!accountId && !email) {
+    throw new HttpError(400, 'missing_query', 'Informe account_id ou email');
   }
 
   if (accountId && !isUuid(accountId)) {
     throw new HttpError(400, 'invalid_account_id', 'account_id invalido');
   }
 
-  if (cpf && cpf.length !== 11) {
-    throw new HttpError(400, 'invalid_cpf', 'CPF invalido');
+  if (email && !isEmail(email)) {
+    throw new HttpError(400, 'invalid_email', 'Email invalido');
   }
 
-  const account = accountId
-    ? await prisma.account.findUnique({
-        where: { id: accountId },
-        include: {
-          identityProfile: true,
-          wallet: true,
-          fraudFlags: true,
-        },
-      })
-    : await prisma.account.findFirst({
-        where: {
-          identityProfile: {
-            cpf,
-          },
-        },
-        include: {
-          identityProfile: true,
-          wallet: true,
-          fraudFlags: true,
-        },
-      });
+  let account = null;
+  if (accountId) {
+    account = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: {
+        identityProfile: true,
+        wallet: true,
+        fraudFlags: true,
+      },
+    });
+  } else {
+    account = await prisma.account.findUnique({
+      where: {
+        email: email as string,
+      },
+      include: {
+        identityProfile: true,
+        wallet: true,
+        fraudFlags: true,
+      },
+    });
+  }
 
   if (!account) {
     throw new HttpError(404, 'account_not_found', 'Conta nao encontrada');
@@ -54,6 +55,8 @@ export async function handleUserLookup(req: IncomingMessage, res: ServerResponse
   const response = {
     account: {
       id: account.id,
+      email: account.email,
+      display_name: account.displayName,
       status: account.status,
       created_at: account.createdAt,
       updated_at: account.updatedAt,
@@ -101,22 +104,13 @@ export async function handleUserLookup(req: IncomingMessage, res: ServerResponse
     targetId: account.id,
     metadata: {
       account_id: accountId ?? undefined,
-      cpf_masked: cpf ? maskCpf(cpf) : undefined,
+      email: email ?? undefined,
     },
   });
 
   sendJson(res, 200, response);
 }
 
-function sanitizeCpf(value: string): string {
-  return value.replace(/\D/g, '');
-}
-
-function maskCpf(value: string): string {
-  const digits = value.replace(/\D/g, '');
-  if (digits.length <= 3) {
-    return '***';
-  }
-
-  return `${'*'.repeat(digits.length - 3)}${digits.slice(-3)}`;
+function isEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }

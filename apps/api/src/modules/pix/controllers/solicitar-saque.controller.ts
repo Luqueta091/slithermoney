@@ -6,8 +6,6 @@ import { requireAccountId } from '../../../shared/http/account';
 import { readIdempotencyKey } from '../../../shared/http/idempotency';
 import { prisma } from '../../../shared/database/prisma';
 import { config } from '../../../shared/config';
-import { IdentidadeRepositoryPrisma } from '../../identidade/repository/identidade.repository.impl';
-import { IdentidadeService } from '../../identidade/services/identidade.service';
 import { CarteirasRepositoryPrisma } from '../../carteiras/repository/carteiras.repository.impl';
 import { LedgerRepositoryPrisma } from '../../ledger/repository/ledger.repository.impl';
 import { LedgerService } from '../../ledger/services/ledger.service';
@@ -20,8 +18,6 @@ const pixRepository = new PixTransacoesRepositoryPrisma(prisma);
 const walletRepository = new CarteirasRepositoryPrisma(prisma);
 const ledgerRepository = new LedgerRepositoryPrisma(prisma);
 const ledgerService = new LedgerService(ledgerRepository);
-const identityRepository = new IdentidadeRepositoryPrisma(prisma);
-const identityService = new IdentidadeService(identityRepository);
 const fraudFlagsService = new FraudFlagsService(prisma);
 const service = new SolicitarSaqueService(
   prisma,
@@ -43,8 +39,6 @@ export async function handlePixWithdrawalRequest(
       issues: parsed.error.flatten(),
     });
   }
-
-  await identityService.assertWithdrawAllowed(accountId);
 
   const idempotencyKey = readIdempotencyKey(req);
 

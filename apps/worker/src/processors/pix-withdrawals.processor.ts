@@ -237,27 +237,30 @@ async function executePayout(withdrawal: {
     };
   }
 
-  const identity = await prisma.identityProfile.findUnique({
-    where: { accountId: withdrawal.accountId },
+  const account = await prisma.account.findUnique({
+    where: { id: withdrawal.accountId },
+    select: {
+      email: true,
+      displayName: true,
+    },
   });
 
-  if (!identity) {
-    throw new Error('Identidade nao encontrada para saque');
+  if (!account) {
+    throw new Error('Conta nao encontrada para saque');
   }
 
   const payload = (withdrawal.payload ?? {}) as {
     pix_key?: string;
-    pix_key_type?: string;
   };
-  const pixKey = payload.pix_key ?? identity.pixKey;
-  const pixKeyType = payload.pix_key_type ?? identity.pixKeyType;
+  const pixKey = payload.pix_key;
+  const sanitizedCpfKey = normalizeCpf(pixKey ?? '');
 
-  if (!pixKey || !pixKeyType) {
-    throw new Error('Chave Pix ausente para saque');
+  if (!pixKey || !isValidCpf(sanitizedCpfKey)) {
+    throw new Error('Chave Pix CPF ausente ou invalida para saque');
   }
 
   const amount = Number((Number(withdrawal.amountCents) / 100).toFixed(2));
-  const keyType = mapPixKeyType(pixKeyType);
+  const payerName = resolveCreditPartyName(account.displayName, account.email);
   const result = await createBspayPayment(
     {
       baseUrl: config.BSPAY_BASE_URL,
@@ -271,10 +274,10 @@ async function executePayout(withdrawal: {
       description: 'Saque de saldo',
       postbackUrl: config.BSPAY_POSTBACK_URL || undefined,
       creditParty: {
-        name: identity.fullName,
-        keyType,
-        key: pixKey,
-        taxId: identity.cpf,
+        name: payerName,
+        keyType: 'CPF',
+        key: sanitizedCpfKey,
+        taxId: sanitizedCpfKey,
       },
     },
   );
@@ -286,17 +289,46 @@ async function executePayout(withdrawal: {
   };
 }
 
-function mapPixKeyType(value: string): string {
-  switch (value) {
-    case 'cpf':
-      return 'CPF';
-    case 'email':
-      return 'EMAIL';
-    case 'phone':
-      return 'PHONE';
-    case 'random':
-      return 'EVP';
-    default:
-      return value.toUpperCase();
+function resolveCreditPartyName(displayName?: string | null, email?: string | null): string {
+  const trimmedDisplay = displayName?.trim();
+  if (trimmedDisplay) {
+    return trimmedDisplay;
   }
+
+  const trimmedEmail = email?.trim().toLowerCase();
+  if (trimmedEmail && trimmedEmail.includes('@')) {
+    const prefix = trimmedEmail.split('@')[0]?.trim();
+    if (prefix) {
+      return prefix;
+    }
+  }
+
+  return 'Usuario Slithermoney';
+}
+
+function normalizeCpf(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+function isValidCpf(value: string): boolean {
+  if (value.length !== 11) {
+    return false;
+  }
+  if (/^(\d)\1{10}$/.test(value)) {
+    return false;
+  }
+
+  const numbers = value.split('').map((digit) => Number(digit));
+  const first = calculateCpfCheckDigit(numbers.slice(0, 9), 10);
+  if (first !== numbers[9]) {
+    return false;
+  }
+  const second = calculateCpfCheckDigit(numbers.slice(0, 10), 11);
+  return second === numbers[10];
+}
+
+function calculateCpfCheckDigit(numbers: number[], weightStart: number): number {
+  const sum = numbers.reduce((acc, digit, index) => acc + digit * (weightStart - index), 0);
+  const remainder = (sum * 10) % 11;
+  return remainder === 10 ? 0 : remainder;
 }

@@ -2,16 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { type RunStartResponse, type Stake, type Wallet, getWallet, listStakes, startRun } from '../api/client';
 import { ActionButton } from '../components/ActionButton';
 import { ScreenContainer } from '../components/ScreenContainer';
+import { InputField } from '../components/InputField';
 import { formatCents } from '../utils/format';
 import { DepositScreen } from './DepositScreen';
 import { WithdrawScreen } from './WithdrawScreen';
 import { HistoryScreen } from './HistoryScreen';
 import { GameScreen } from './GameScreen';
 import { useAuth } from '../context/auth';
-import { InputField } from '../components/InputField';
-import { IdentityScreen } from './IdentityScreen';
-import { type PixKeyType } from '../utils/pixKey';
-import { sanitizeCpf } from '../utils/validation';
 
 const TABS = [
   { id: 'lobby', label: 'Lobby' },
@@ -34,14 +31,12 @@ type TabId = (typeof TABS)[number]['id'];
 export function HomeScreen(): JSX.Element {
   const auth = useAuth();
   const signedIn = auth.status === 'signedIn';
-  const needsIdentity = auth.status === 'needsIdentity';
   const accountId = auth.accountId ?? '';
-  const identity = auth.identity;
+  const profile = auth.profile;
   const [tab, setTab] = useState<TabId>('lobby');
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [stakes, setStakes] = useState<Stake[]>([]);
   const [selectedStakeId, setSelectedStakeId] = useState<string | null>(null);
-  const [customStake] = useState('');
   const [run, setRun] = useState<RunStartResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRun, setLoadingRun] = useState(false);
@@ -49,11 +44,6 @@ export function HomeScreen(): JSX.Element {
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'profile'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [cpf, setCpf] = useState('');
-  const [pixKeyType, setPixKeyType] = useState<PixKeyType>('email');
-  const [pixKey, setPixKey] = useState('');
-  const [termsAccepted, setTermsAccepted] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
   const [nicknameError, setNicknameError] = useState<string | null>(null);
   const [nicknameSaving, setNicknameSaving] = useState(false);
@@ -112,31 +102,15 @@ export function HomeScreen(): JSX.Element {
   useEffect(() => {
     if (signedIn) {
       setAuthOpen(false);
-      return;
     }
-    if (needsIdentity) {
-      setAuthOpen(true);
-      setAuthMode('signup');
-    }
-  }, [signedIn, needsIdentity]);
+  }, [signedIn]);
 
   useEffect(() => {
-    if (!identity) {
+    if (!signedIn) {
       return;
     }
-    if (!pixKey) {
-      setPixKey(identity.pix_key ?? '');
-      if (identity.pix_key_type) {
-        setPixKeyType(identity.pix_key_type as PixKeyType);
-      }
-    }
-  }, [identity, pixKey, pixKeyType]);
-
-  useEffect(() => {
-    if (identity?.full_name) {
-      setNicknameDraft(identity.full_name);
-    }
-  }, [identity?.full_name]);
+    setNicknameDraft(resolveDisplayName(profile?.display_name, profile?.email));
+  }, [profile?.display_name, profile?.email, signedIn]);
 
   const featuredStakes = useMemo(() => pickFeaturedStakes(stakes), [stakes]);
 
@@ -158,13 +132,10 @@ export function HomeScreen(): JSX.Element {
     return stakes.find((stake) => stake.id === selectedStakeId) ?? null;
   }, [featuredStakes, stakes, selectedStakeId]);
 
-  const stakeCents = useMemo(() => {
-    if (customStake.trim()) {
-      return parseAmountToCents(customStake);
-    }
-
-    return selectedStake ? Number.parseInt(selectedStake.amount_cents, 10) : null;
-  }, [customStake, selectedStake]);
+  const stakeCents = useMemo(
+    () => (selectedStake ? Number.parseInt(selectedStake.amount_cents, 10) : null),
+    [selectedStake],
+  );
 
   const loadInitialData = async (): Promise<void> => {
     try {
@@ -239,14 +210,7 @@ export function HomeScreen(): JSX.Element {
         content = <DepositScreen accountId={accountId} onConfirmed={refreshWallet} />;
         break;
       case 'withdraw':
-        content = (
-          <WithdrawScreen
-            accountId={accountId}
-            onUpdated={refreshWallet}
-            pixKey={pixKey}
-            pixKeyType={pixKeyType}
-          />
-        );
+        content = <WithdrawScreen accountId={accountId} onUpdated={refreshWallet} />;
         break;
       case 'history':
         content = <HistoryScreen accountId={accountId} />;
@@ -297,32 +261,21 @@ export function HomeScreen(): JSX.Element {
                   label={nicknameSaving ? 'Salvando...' : 'Salvar nickname'}
                   disabled={nicknameSaving}
                   onClick={async () => {
-                    if (!signedIn || !identity) {
+                    if (!signedIn) {
                       setNicknameError('Sessao invalida');
                       return;
                     }
 
                     const nextName = nicknameDraft.trim();
-                    if (!nextName) {
+                    if (nextName.length < 2) {
                       setNicknameError('Informe um nickname valido');
-                      return;
-                    }
-
-                    const pixType = normalizePixKeyType(identity.pix_key_type);
-                    if (!pixType) {
-                      setNicknameError('Tipo de chave Pix invalido no perfil');
                       return;
                     }
 
                     auth.resetError();
                     setNicknameError(null);
                     setNicknameSaving(true);
-                    const success = await auth.completeIdentity({
-                      fullName: nextName,
-                      cpf: sanitizeCpf(identity.cpf),
-                      pixKey: identity.pix_key,
-                      pixKeyType: pixType,
-                    });
+                    const success = await auth.updateDisplayName(nextName);
                     setNicknameSaving(false);
                     if (success) {
                       setAuthOpen(false);
@@ -341,76 +294,48 @@ export function HomeScreen(): JSX.Element {
               </div>
             </>
           ) : authMode === 'signup' ? (
-            <IdentityScreen
-              accountId={accountId}
-              email={email}
-              password={password}
-              onEmailChange={(value) => {
-                auth.resetError();
-                setEmail(value);
-              }}
-              onPasswordChange={(value) => {
-                auth.resetError();
-                setPassword(value);
-              }}
-              fullName={fullName}
-              cpf={cpf}
-              pixKey={pixKey}
-              pixKeyType={pixKeyType}
-              termsAccepted={termsAccepted}
-              onTermsChange={(value) => {
-                auth.resetError();
-                setTermsAccepted(value);
-              }}
-              onFullNameChange={(value) => {
-                auth.resetError();
-                setFullName(value);
-              }}
-              onCpfChange={(value) => {
-                auth.resetError();
-                setCpf(value);
-              }}
-              onPixKeyChange={(value) => {
-                auth.resetError();
-                setPixKey(value);
-              }}
-              onPixKeyTypeChange={(value) => {
-                auth.resetError();
-                setPixKeyType(value);
-              }}
-              onSubmit={() =>
-                (async () => {
-                  auth.resetError();
-                  const createdAccountId = await auth.signUpWithEmail(email, password);
-                  if (!createdAccountId) {
-                    return;
-                  }
-                  await auth.completeIdentity(
-                    {
-                      fullName: fullName.trim(),
-                      cpf: sanitizeCpf(cpf),
-                      pixKey: pixKey.trim(),
-                      pixKeyType,
-                    },
-                    createdAccountId,
-                  );
-                })()
-              }
-              onSwitchToLogin={() => {
-                auth.resetError();
-                setAuthMode('login');
-              }}
-              onBack={() => {
-                auth.resetError();
-                setAuthOpen(false);
-              }}
-              onSignOut={() => {
-                auth.signOut();
-                setAuthOpen(false);
-                setTermsAccepted(false);
-              }}
-              error={auth.error}
-            />
+            <>
+              <div className="hero">
+                <p className="kicker">Sessao</p>
+                <h2 className="title">Criar conta</h2>
+                <p className="subtitle">Cadastre com email e senha.</p>
+              </div>
+              <div className="card">
+                <InputField
+                  label="Email"
+                  value={email}
+                  onChange={(value) => {
+                    auth.resetError();
+                    setEmail(value);
+                  }}
+                  placeholder="voce@email.com"
+                  type="email"
+                />
+                <InputField
+                  label="Senha"
+                  value={password}
+                  onChange={(value) => {
+                    auth.resetError();
+                    setPassword(value);
+                  }}
+                  placeholder="••••••••"
+                  type="password"
+                />
+                {auth.error ? <p className="error">{auth.error}</p> : null}
+              </div>
+              <div className="actions">
+                <ActionButton label="Criar conta" onClick={() => auth.signUpWithEmail(email, password)} />
+                <ActionButton
+                  label="Ja tenho conta"
+                  onClick={() => {
+                    auth.resetError();
+                    setAuthMode('login');
+                  }}
+                  variant="ghost"
+                />
+                <ActionButton label="Voltar" onClick={() => setAuthOpen(false)} variant="ghost" />
+              </div>
+            </>
           ) : (
             <>
               <div className="hero">
@@ -491,7 +416,7 @@ export function HomeScreen(): JSX.Element {
                     return;
                   }
                   setAuthOpen(true);
-                  setAuthMode(needsIdentity ? 'signup' : 'login');
+                  setAuthMode('login');
                 }}
               >
                 {signedIn ? 'Sair' : 'Entrar'}
@@ -512,10 +437,12 @@ export function HomeScreen(): JSX.Element {
                     return;
                   }
                   setAuthOpen(true);
-                  setAuthMode(needsIdentity ? 'signup' : 'login');
+                  setAuthMode('login');
                 }}
               >
-                {signedIn ? identity?.full_name ?? 'Jogador' : 'Login para definir seu nome'}
+                {signedIn
+                  ? resolveDisplayName(profile?.display_name, profile?.email)
+                  : 'Login para definir seu nome'}
               </button>
               <button
                 type="button"
@@ -529,9 +456,9 @@ export function HomeScreen(): JSX.Element {
                     return;
                   }
                   setAuthOpen(true);
-                  setAuthMode(needsIdentity ? 'signup' : 'login');
+                  setAuthMode('login');
                 }}
-                aria-label="Abrir login"
+                aria-label="Editar nickname"
               >
                 ✎
               </button>
@@ -611,7 +538,9 @@ export function HomeScreen(): JSX.Element {
             <ol className="home-leaderboard-list">
               {LEADERBOARD_ENTRIES.map((entry, index) => (
                 <li key={entry.name}>
-                  <span>{index + 1}. {entry.name}</span>
+                  <span>
+                    {index + 1}. {entry.name}
+                  </span>
                   <strong>{entry.value}</strong>
                 </li>
               ))}
@@ -627,7 +556,7 @@ export function HomeScreen(): JSX.Element {
       return true;
     }
     setAuthOpen(true);
-    setAuthMode(needsIdentity ? 'signup' : 'login');
+    setAuthMode('login');
     if (nextTab) {
       setTab('lobby');
     }
@@ -668,21 +597,21 @@ function formatStakeLabel(stake: Stake): string {
   return `$${value.toFixed(2)}`;
 }
 
-function normalizePixKeyType(value: string): PixKeyType | null {
-  if (value === 'cpf' || value === 'phone' || value === 'email' || value === 'random') {
-    return value;
-  }
-  return null;
-}
-
-function parseAmountToCents(value: string): number | null {
-  const normalized = value.replace(',', '.').trim();
-  const parsed = Number.parseFloat(normalized);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
+function resolveDisplayName(displayName?: string | null, email?: string | null): string {
+  const trimmedDisplay = displayName?.trim();
+  if (trimmedDisplay) {
+    return trimmedDisplay;
   }
 
-  return Math.round(parsed * 100);
+  const normalizedEmail = email?.trim().toLowerCase();
+  if (normalizedEmail && normalizedEmail.includes('@')) {
+    const prefix = normalizedEmail.split('@')[0]?.trim();
+    if (prefix) {
+      return prefix;
+    }
+  }
+
+  return 'Jogador';
 }
 
 function resolveError(error: unknown): string {

@@ -9,6 +9,7 @@ generator client {
 model Account {
   id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email          String?           @unique
+  displayName    String?           @map("display_name")
   passwordHash   String?           @map("password_hash")
   passwordSalt   String?           @map("password_salt")
   status         String            @default("active")
