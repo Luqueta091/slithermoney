@@ -1,9 +1,11 @@
 import { IncomingMessage, ServerResponse } from 'http';
+import { URL } from 'url';
 import { readJson } from '../../../shared/http/body';
 import { sendJson } from '../../../shared/http/response';
 import { HttpError } from '../../../shared/http/http-error';
 import { prisma } from '../../../shared/database/prisma';
 import { config } from '../../../shared/config';
+import { logger } from '../../../shared/observability/logger';
 import { CarteirasRepositoryPrisma } from '../../carteiras/repository/carteiras.repository.impl';
 import { LedgerRepositoryPrisma } from '../../ledger/repository/ledger.repository.impl';
 import { LedgerService } from '../../ledger/services/ledger.service';
@@ -42,14 +44,43 @@ export async function handlePixWebhook(
 }
 
 function enforcePixWebhookKey(req: IncomingMessage): void {
-  if (!config.PIX_WEBHOOK_SECRET) {
+  if (isValidWebhookToken(req)) {
     return;
   }
 
-  const headerValue = req.headers['x-pix-webhook-key'];
-  if (!headerValue || Array.isArray(headerValue) || headerValue !== config.PIX_WEBHOOK_SECRET) {
-    throw new HttpError(401, 'unauthorized', 'Chave do webhook Pix invalida');
+  if (
+    config.PIX_WEBHOOK_LEGACY_HEADER_ENABLED &&
+    config.PIX_WEBHOOK_SECRET &&
+    isValidLegacyWebhookHeader(req)
+  ) {
+    logger.warn('pix_webhook_legacy_header_used');
+    return;
   }
+
+  throw new HttpError(401, 'unauthorized', 'Chave do webhook Pix invalida');
+}
+
+function isValidWebhookToken(req: IncomingMessage): boolean {
+  if (!config.PIX_WEBHOOK_TOKEN) {
+    return false;
+  }
+
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const token = url.searchParams.get('token');
+  if (!token) {
+    return false;
+  }
+
+  return token === config.PIX_WEBHOOK_TOKEN;
+}
+
+function isValidLegacyWebhookHeader(req: IncomingMessage): boolean {
+  const headerValue = req.headers['x-pix-webhook-key'];
+  if (!headerValue || Array.isArray(headerValue)) {
+    return false;
+  }
+
+  return headerValue === config.PIX_WEBHOOK_SECRET;
 }
 
 function mapResponse(transaction: {

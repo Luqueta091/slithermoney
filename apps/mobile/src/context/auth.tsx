@@ -3,7 +3,9 @@ import {
   ApiError,
   getProfile,
   login,
+  logout,
   signup,
+  toSession,
   type Profile,
   updateProfile,
 } from '../api/client';
@@ -43,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       return;
     }
 
-    setAccountId(stored);
-    void refreshProfile(stored);
+    setAccountId(stored.accountId);
+    void refreshProfile(stored.accountId);
   };
 
   const refreshProfile = async (id: string): Promise<void> => {
@@ -69,16 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       setError('Email invalido');
       return;
     }
-    if (password.trim().length < 4) {
+    if (!password.trim()) {
       setError('Senha invalida');
       return;
     }
 
     try {
       const response = await login(trimmedEmail, password);
-      saveSession(response.account_id);
-      setAccountId(response.account_id);
-      await refreshProfile(response.account_id);
+      const session = toSession(response);
+      saveSession(session);
+      setAccountId(session.accountId);
+      await refreshProfile(session.accountId);
     } catch (err) {
       const resolved = resolveError(err);
       setError(resolved.message);
@@ -92,16 +95,17 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       setError('Email invalido');
       return;
     }
-    if (password.trim().length < 4) {
-      setError('Senha invalida');
+    if (!isStrongPassword(password)) {
+      setError('Senha deve ter no minimo 8 caracteres, com letra e numero');
       return;
     }
 
     try {
       const response = await signup(trimmedEmail, password);
-      saveSession(response.account_id);
-      setAccountId(response.account_id);
-      await refreshProfile(response.account_id);
+      const session = toSession(response);
+      saveSession(session);
+      setAccountId(session.accountId);
+      await refreshProfile(session.accountId);
     } catch (err) {
       const resolved = resolveError(err);
       setError(resolved.message);
@@ -127,6 +131,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   };
 
   const signOut = (): void => {
+    const stored = loadSession();
+    if (stored?.refreshToken) {
+      void logout(stored.refreshToken).catch(() => undefined);
+    }
     clearSession();
     setAccountId(null);
     setProfile(null);
@@ -183,4 +191,13 @@ function resolveError(error: unknown): ResolvedError {
   }
 
   return { message: 'Erro inesperado' };
+}
+
+function isStrongPassword(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 8) {
+    return false;
+  }
+
+  return /[A-Za-z]/.test(trimmed) && /[0-9]/.test(trimmed);
 }

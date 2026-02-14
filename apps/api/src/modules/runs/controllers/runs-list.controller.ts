@@ -5,7 +5,7 @@ import { HttpError } from '../../../shared/http/http-error';
 import { sendJson } from '../../../shared/http/response';
 
 export async function handleRunsMe(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('read');
   const url = new URL(req.url ?? '/', 'http://localhost');
   const status = normalizeValue(url.searchParams.get('status'));
   const limit = parseLimit(url.searchParams.get('limit'));

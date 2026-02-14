@@ -60,7 +60,7 @@ const bspayBodySchema = z
     if (data.statusCode?.statusId !== undefined) {
       return data.statusCode.statusId === 1;
     }
-    return true;
+    return false;
   }, {
     message: 'status must be PAID',
   });

@@ -9,7 +9,7 @@ export async function handlePixTransactionsMe(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('read');
   const url = new URL(req.url ?? '/', 'http://localhost');
   const statusParam = url.searchParams.get('status');
   const txTypeParam = url.searchParams.get('tx_type');

@@ -15,7 +15,7 @@ export async function handleGetLedgerStatement(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('read');
   const url = new URL(req.url ?? '/', 'http://localhost');
   const query = parseLedgerStatementQuery(url);
 

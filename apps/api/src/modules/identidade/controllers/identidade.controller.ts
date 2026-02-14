@@ -17,7 +17,7 @@ export async function handleUpsertIdentity(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('write');
   const body = await readJson<unknown>(req);
   const parsed = identidadeInputSchema.safeParse(body);
 
@@ -36,7 +36,7 @@ export async function handleGetIdentityMe(
   _req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('read');
   const identity = await service.getByAccount(accountId);
 
   if (!identity) {

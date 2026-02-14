@@ -13,7 +13,7 @@ export async function handleGetWalletMe(
   _req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('read');
   const wallet = await service.getWallet(accountId);
 
   sendJson(res, 200, mapWallet(wallet));

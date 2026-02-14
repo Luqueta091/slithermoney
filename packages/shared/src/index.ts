@@ -3,6 +3,8 @@ export { createMetricsStore, type MetricsSnapshot, type MetricsStore } from './o
 export {
   getRequestContext,
   runWithRequestContext,
+  setRequestContext,
   type RequestContext,
 } from './observability/request-context';
 export { loadEnv } from './env';
+export { signToken, verifyToken, type TokenValidationResult } from './auth/token';

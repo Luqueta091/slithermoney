@@ -14,7 +14,6 @@ export function withRequestContext(
 ): void {
   const requestId = pickHeader(req.headers['x-request-id']) ?? randomUUID();
   const traceId = pickHeader(req.headers['x-trace-id']) ?? requestId;
-  const userId = pickHeader(req.headers['x-user-id']);
 
   res.setHeader('x-request-id', requestId);
 
@@ -22,7 +21,6 @@ export function withRequestContext(
     {
       request_id: requestId,
       trace_id: traceId,
-      user_id: userId,
     },
     () => {
       const startedAt = Date.now();

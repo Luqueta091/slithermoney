@@ -22,7 +22,7 @@ export async function handleStartRun(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('write');
   const body = await readJson<unknown>(req);
   const parsed = runStartInputSchema.safeParse(body);
 

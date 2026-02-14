@@ -93,14 +93,7 @@ export function handleWithdrawalsUi(_req: IncomingMessage, res: ServerResponse):
       <section class="panel">
         <div class="grid">
           <div>
-            <label>Backoffice role</label>
-            <select id="role">
-              <option value="admin">admin</option>
-              <option value="support">support</option>
-            </select>
-          </div>
-          <div>
-            <label>Backoffice key (se configurada)</label>
+            <label>Backoffice key</label>
             <input id="key" type="password" placeholder="BACKOFFICE_ACCESS_KEY" />
           </div>
           <div>
@@ -143,23 +136,19 @@ export function handleWithdrawalsUi(_req: IncomingMessage, res: ServerResponse):
       const setStatus = (text) => { $('status').textContent = text; };
 
       function loadStored() {
-        $('role').value = storage.getItem('bo_role') || 'admin';
         $('key').value = storage.getItem('bo_key') || '';
         $('userId').value = storage.getItem('bo_user') || '';
         $('accountId').value = storage.getItem('bo_account') || '';
       }
 
       function saveStored() {
-        storage.setItem('bo_role', $('role').value);
         storage.setItem('bo_key', $('key').value);
         storage.setItem('bo_user', $('userId').value);
         storage.setItem('bo_account', $('accountId').value);
       }
 
       function headers() {
-        const h = {
-          'x-backoffice-role': $('role').value,
-        };
+        const h = {};
         const key = $('key').value.trim();
         const userId = $('userId').value.trim();
         if (key) h['x-backoffice-key'] = key;

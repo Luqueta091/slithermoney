@@ -1,3 +1,5 @@
+import { clearSession, loadSession, saveSession, type Session } from '../storage/session';
+
 export type ApiErrorPayload = {
   code?: string;
   message?: string;
@@ -18,36 +20,30 @@ export class ApiError extends Error {
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+let refreshInFlight: Promise<Session | null> | null = null;
 
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
   accountId?: string,
 ): Promise<T> {
-  const headers = new Headers(options.headers ?? {});
-  if (!headers.has('content-type') && options.body) {
-    headers.set('content-type', 'application/json');
-  }
-  if (accountId) {
-    headers.set('x-user-id', accountId);
-  }
+  const requiresAuth = Boolean(accountId);
+  let session = requiresAuth ? await getSessionForAccount(accountId as string) : null;
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const firstResponse = await performRequest(path, options, session?.accessToken);
 
-  const contentType = response.headers.get('content-type') ?? '';
-  const isJson = contentType.includes('application/json');
-  const payload = isJson ? await response.json().catch(() => null) : null;
+  if (firstResponse.response.status === 401 && requiresAuth) {
+    session = await refreshCurrentSession();
+    if (!session || session.accountId !== accountId) {
+      clearSession();
+      throw new ApiError(401, 'unauthorized', 'Sessao expirada');
+    }
 
-  if (!response.ok) {
-    const errorPayload = payload as ApiErrorPayload | null;
-    const message = errorPayload?.message ?? 'Falha ao conectar na API';
-    throw new ApiError(response.status, errorPayload?.code, message, errorPayload?.details);
+    const retry = await performRequest(path, options, session.accessToken);
+    return parseResponse<T>(retry.response, retry.payload);
   }
 
-  return payload as T;
+  return parseResponse<T>(firstResponse.response, firstResponse.payload);
 }
 
 export type Profile = {
@@ -172,6 +168,10 @@ export type PixWithdrawalResponse = {
 
 export type AuthResponse = {
   account_id: string;
+  access_token: string;
+  refresh_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
 };
 
 export async function getProfile(accountId: string): Promise<Profile> {
@@ -203,6 +203,13 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return apiRequest<AuthResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function logout(refreshToken: string): Promise<void> {
+  await apiRequest<{ ok: boolean }>('/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
   });
 }
 
@@ -340,4 +347,98 @@ export async function requestWithdrawal(
     },
     accountId,
   );
+}
+
+export function toSession(response: AuthResponse): Session {
+  return {
+    accountId: response.account_id,
+    accessToken: response.access_token,
+    refreshToken: response.refresh_token,
+    tokenType: response.token_type,
+    expiresAt: Date.now() + response.expires_in * 1000,
+  };
+}
+
+async function performRequest(
+  path: string,
+  options: RequestInit,
+  accessToken?: string,
+): Promise<{ response: Response; payload: unknown }> {
+  const headers = new Headers(options.headers ?? {});
+  if (!headers.has('content-type') && options.body) {
+    headers.set('content-type', 'application/json');
+  }
+  if (accessToken) {
+    headers.set('authorization', `Bearer ${accessToken}`);
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+  });
+
+  const contentType = response.headers.get('content-type') ?? '';
+  const isJson = contentType.includes('application/json');
+  const payload = isJson ? await response.json().catch(() => null) : null;
+  return { response, payload };
+}
+
+function parseResponse<T>(response: Response, payload: unknown): T {
+  if (!response.ok) {
+    const errorPayload = payload as ApiErrorPayload | null;
+    const message = errorPayload?.message ?? 'Falha ao conectar na API';
+    throw new ApiError(response.status, errorPayload?.code, message, errorPayload?.details);
+  }
+
+  return payload as T;
+}
+
+async function getSessionForAccount(accountId: string): Promise<Session> {
+  const session = loadSession();
+  if (!session || session.accountId !== accountId) {
+    throw new ApiError(401, 'unauthorized', 'Sessao invalida');
+  }
+
+  if (session.expiresAt <= Date.now()) {
+    const refreshed = await refreshCurrentSession();
+    if (!refreshed || refreshed.accountId !== accountId) {
+      clearSession();
+      throw new ApiError(401, 'unauthorized', 'Sessao expirada');
+    }
+    return refreshed;
+  }
+
+  return session;
+}
+
+async function refreshCurrentSession(): Promise<Session | null> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  const current = loadSession();
+  if (!current?.refreshToken) {
+    return null;
+  }
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await performRequest('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: current.refreshToken }),
+      });
+
+      const parsed = parseResponse<AuthResponse>(response.response, response.payload);
+      const next = toSession(parsed);
+      saveSession(next);
+      return next;
+    } catch {
+      clearSession();
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }

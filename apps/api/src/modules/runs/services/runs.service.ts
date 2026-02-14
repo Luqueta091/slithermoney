@@ -1,6 +1,7 @@
-import { randomUUID } from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { signToken } from '@slithermoney/shared';
 import { HttpError } from '../../../shared/http/http-error';
+import { config } from '../../../shared/config';
 import { ValidationError } from '../../../shared/errors/validation-error';
 import { CarteirasRepository } from '../../carteiras/repository/carteiras.repository';
 import { LedgerService } from '../../ledger/services/ledger.service';
@@ -28,7 +29,6 @@ export class RunsService {
   ): Promise<RunStartResult> {
     const stakeCents = assertStake(input.stakeCents, options.minStakeCents, options.maxStakeCents);
     const amount = BigInt(stakeCents);
-    const joinToken = randomUUID();
 
     const run = await this.prisma.$transaction(async (tx) => {
       await this.walletRepository.ensureAccountAndWallet(accountId, tx);
@@ -73,6 +73,18 @@ export class RunsService {
 
       return createdRun;
     });
+
+    const joinToken = signToken(
+      {
+        run_id: run.id,
+        account_id: accountId,
+        type: 'join',
+      },
+      config.RUN_JOIN_TOKEN_SECRET,
+      {
+        expiresInSeconds: config.RUN_JOIN_TOKEN_EXPIRES_SECONDS,
+      },
+    );
 
     return {
       run,

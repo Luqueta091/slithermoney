@@ -8,7 +8,7 @@ export const RUN_EVENT_VERSION = 1;
 
 export type HelloPayload = {
   run_id?: string;
-  join_token?: string;
+  join_token: string;
   protocol_version?: number;
 };
 

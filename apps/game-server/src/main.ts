@@ -3,6 +3,7 @@ import { URL } from 'url';
 import { randomUUID } from 'crypto';
 import type { IncomingMessage } from 'http';
 import WebSocket, { RawData, WebSocketServer } from 'ws';
+import { verifyToken } from '@slithermoney/shared';
 import { config } from './shared/config';
 import { logger } from './shared/observability/logger';
 import { ArenaManager } from './modules/realtime';
@@ -69,6 +70,13 @@ const server = http.createServer((req, res) => {
   }
 
   if (method === 'GET' && url.pathname === '/metrics') {
+    if (!canAccessMetrics(req)) {
+      res.statusCode = 404;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'not_found' }));
+      return;
+    }
+
     const metrics = arenaManager.getMetrics();
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
@@ -254,6 +262,18 @@ const shutdown = (signal: string) => {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
+function canAccessMetrics(req: IncomingMessage): boolean {
+  if (config.NODE_ENV !== 'production') {
+    return true;
+  }
+  if (!config.METRICS_INTERNAL_ENABLED) {
+    return false;
+  }
+  const header = req.headers['x-metrics-key'];
+  const key = Array.isArray(header) ? header[0] : header;
+  return Boolean(key && key === config.METRICS_INTERNAL_KEY);
+}
+
 type ConnectionContext = {
   id: string;
   playerId: string;
@@ -276,8 +296,33 @@ function handleHello(context: ConnectionContext, payload?: HelloPayload): void {
     return;
   }
 
+  const joinToken = payload?.join_token;
+  if (!joinToken) {
+    sendError(context.socket, 'missing_join_token', 'join_token obrigatorio');
+    context.socket.close(1008, 'missing join token');
+    return;
+  }
+
+  const verified = verifyToken<{
+    run_id?: string;
+    account_id?: string;
+    type?: string;
+  }>(joinToken, config.RUN_JOIN_TOKEN_SECRET);
+
+  if (!verified.ok || verified.payload.type !== 'join' || typeof verified.payload.run_id !== 'string') {
+    sendError(context.socket, 'invalid_join_token', 'join_token invalido');
+    context.socket.close(1008, 'invalid join token');
+    return;
+  }
+
+  if (payload?.run_id && payload.run_id !== verified.payload.run_id) {
+    sendError(context.socket, 'invalid_join_token', 'run_id divergente');
+    context.socket.close(1008, 'run mismatch');
+    return;
+  }
+
   context.state = 'hello';
-  context.runId = payload?.run_id;
+  context.runId = verified.payload.run_id;
 
   sendMessage(context.socket, {
     type: 'WELCOME',
@@ -296,6 +341,12 @@ function handleJoin(context: ConnectionContext, payload?: JoinPayload): void {
   }
 
   if (context.state === 'joined') {
+    return;
+  }
+
+  if (payload?.run_id && context.runId && payload.run_id !== context.runId) {
+    sendError(context.socket, 'invalid_join_token', 'run_id divergente');
+    context.socket.close(1008, 'run mismatch');
     return;
   }
 

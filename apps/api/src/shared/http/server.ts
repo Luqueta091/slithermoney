@@ -1,5 +1,6 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
+import { setRequestContext } from '@slithermoney/shared';
 import { config } from '../config';
 import { logger } from '../observability/logger';
 import { metrics, recordHttpRequest, setHttpInFlight } from '../observability/metrics';
@@ -18,7 +19,13 @@ import { handleStartRun } from '../../modules/runs/controllers/runs.controller';
 import { handleRunCashout, handleRunEliminated } from '../../modules/runs/controllers/run-events.controller';
 import { handleRunsMe } from '../../modules/runs/controllers/runs-list.controller';
 import { handleListStakes } from '../../modules/stakes/controllers/stakes.controller';
-import { handleAuthLogin, handleAuthSignup } from '../../modules/auth/controllers/auth.controller';
+import {
+  handleAuthLogin,
+  handleAuthLogout,
+  handleAuthRefresh,
+  handleAuthSignup,
+} from '../../modules/auth/controllers/auth.controller';
+import { resolveAccountAuth } from './auth';
 import { isHttpError, HttpError } from './http-error';
 import { withRequestContext } from './request-context';
 import { enforceRateLimit, getRateLimitIdentifier } from './rate-limit';
@@ -27,55 +34,133 @@ import { ValidationError } from '../errors/validation-error';
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
 
-const routes: Record<string, Handler> = {
-  'GET /': (_req, res) => {
-    sendJson(res, 200, {
-      message: 'api ok',
-    });
-  },
-  'GET /health': (_req, res) => {
-    sendJson(res, 200, {
-      status: 'ok',
-      service: config.SERVICE_NAME,
-      version: config.APP_VERSION,
-      revision: config.GIT_SHA,
-    });
-  },
-  'GET /metrics': (_req, res) => {
-    sendJson(res, 200, {
-      status: 'ok',
-      service: config.SERVICE_NAME,
-      version: config.APP_VERSION,
-      revision: config.GIT_SHA,
-      metrics: metrics.snapshot(),
-    });
-  },
-  'POST /auth/signup': handleAuthSignup,
-  'POST /auth/login': handleAuthLogin,
-  'POST /identity': handleUpsertIdentity,
-  'GET /identity/me': handleGetIdentityMe,
-  'GET /profile/me': handleGetProfileMe,
-  'PATCH /profile/me': handleUpdateProfileMe,
-  'GET /wallet/me': handleGetWalletMe,
-  'GET /ledger/me': handleGetLedgerStatement,
-  'POST /pix/deposits': handleCreatePixDeposit,
-  'POST /pix/webhook': handlePixWebhook,
-  'POST /pix/withdrawals': handlePixWithdrawalRequest,
-  'GET /pix/transactions/me': handlePixTransactionsMe,
-  'GET /stakes': handleListStakes,
-  'POST /runs/start': handleStartRun,
-  'GET /runs/me': handleRunsMe,
-  'POST /runs/events/eliminated': handleRunEliminated,
-  'POST /runs/events/cashout': handleRunCashout,
+type RouteAuth = 'public' | 'read' | 'write';
+
+type RouteConfig = {
+  handler: Handler;
+  auth: RouteAuth;
+  rateLimit?: number;
 };
 
-const rateLimitRules: Record<string, number> = {
-  'POST /identity': config.RATE_LIMIT_IDENTITY_MAX,
-  'PATCH /profile/me': config.RATE_LIMIT_IDENTITY_MAX,
-  'POST /pix/deposits': config.RATE_LIMIT_PIX_MAX,
-  'POST /pix/withdrawals': config.RATE_LIMIT_PIX_MAX,
-  'POST /pix/webhook': config.RATE_LIMIT_WEBHOOK_MAX,
-  'POST /runs/start': config.RATE_LIMIT_RUNS_MAX,
+const routes: Record<string, RouteConfig> = {
+  'GET /': {
+    auth: 'public',
+    handler: (_req, res) => {
+      sendJson(res, 200, {
+        message: 'api ok',
+      });
+    },
+  },
+  'GET /health': {
+    auth: 'public',
+    handler: (_req, res) => {
+      sendJson(res, 200, {
+        status: 'ok',
+        service: config.SERVICE_NAME,
+        version: config.APP_VERSION,
+        revision: config.GIT_SHA,
+      });
+    },
+  },
+  'GET /metrics': {
+    auth: 'public',
+    handler: (req, res) => {
+      enforceMetricsAccess(req);
+      sendJson(res, 200, {
+        status: 'ok',
+        service: config.SERVICE_NAME,
+        version: config.APP_VERSION,
+        revision: config.GIT_SHA,
+        metrics: metrics.snapshot(),
+      });
+    },
+  },
+  'POST /auth/signup': {
+    auth: 'public',
+    handler: handleAuthSignup,
+    rateLimit: config.RATE_LIMIT_AUTH_MAX,
+  },
+  'POST /auth/login': {
+    auth: 'public',
+    handler: handleAuthLogin,
+    rateLimit: config.RATE_LIMIT_AUTH_MAX,
+  },
+  'POST /auth/refresh': {
+    auth: 'public',
+    handler: handleAuthRefresh,
+    rateLimit: config.RATE_LIMIT_AUTH_MAX,
+  },
+  'POST /auth/logout': {
+    auth: 'public',
+    handler: handleAuthLogout,
+    rateLimit: config.RATE_LIMIT_AUTH_MAX,
+  },
+  'POST /identity': {
+    auth: 'write',
+    handler: handleUpsertIdentity,
+    rateLimit: config.RATE_LIMIT_IDENTITY_MAX,
+  },
+  'GET /identity/me': {
+    auth: 'read',
+    handler: handleGetIdentityMe,
+  },
+  'GET /profile/me': {
+    auth: 'read',
+    handler: handleGetProfileMe,
+  },
+  'PATCH /profile/me': {
+    auth: 'write',
+    handler: handleUpdateProfileMe,
+    rateLimit: config.RATE_LIMIT_IDENTITY_MAX,
+  },
+  'GET /wallet/me': {
+    auth: 'read',
+    handler: handleGetWalletMe,
+  },
+  'GET /ledger/me': {
+    auth: 'read',
+    handler: handleGetLedgerStatement,
+  },
+  'POST /pix/deposits': {
+    auth: 'write',
+    handler: handleCreatePixDeposit,
+    rateLimit: config.RATE_LIMIT_PIX_MAX,
+  },
+  'POST /pix/webhook': {
+    auth: 'public',
+    handler: handlePixWebhook,
+    rateLimit: config.RATE_LIMIT_WEBHOOK_MAX,
+  },
+  'POST /pix/withdrawals': {
+    auth: 'write',
+    handler: handlePixWithdrawalRequest,
+    rateLimit: config.RATE_LIMIT_PIX_MAX,
+  },
+  'GET /pix/transactions/me': {
+    auth: 'read',
+    handler: handlePixTransactionsMe,
+  },
+  'GET /stakes': {
+    auth: 'public',
+    handler: handleListStakes,
+  },
+  'POST /runs/start': {
+    auth: 'write',
+    handler: handleStartRun,
+    rateLimit: config.RATE_LIMIT_RUNS_MAX,
+  },
+  'GET /runs/me': {
+    auth: 'read',
+    handler: handleRunsMe,
+  },
+  'POST /runs/events/eliminated': {
+    auth: 'public',
+    handler: handleRunEliminated,
+  },
+  'POST /runs/events/cashout': {
+    auth: 'public',
+    handler: handleRunCashout,
+  },
 };
 
 export function startServer(): void {
@@ -125,24 +210,32 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     const method = req.method ?? 'GET';
     const url = new URL(req.url ?? '/', `http://localhost:${config.PORT}`);
     const key = `${method} ${url.pathname}`;
-    const handler = routes[key];
+    const route = routes[key];
 
-    if (!handler) {
+    if (!route) {
       sendJson(res, 404, { error: 'not_found' });
       return;
     }
 
-    const rule = rateLimitRules[key];
-    if (rule) {
+    if (route.auth === 'read' || route.auth === 'write') {
+      const auth = await resolveAccountAuth(req, route.auth);
+      setRequestContext({
+        user_id: auth.accountId,
+        auth_source: auth.source,
+        auth_token_id: auth.tokenId,
+      });
+    }
+
+    if (route.rateLimit) {
       const identifier = getRateLimitIdentifier(req);
       enforceRateLimit({
         key: `${key}:${identifier}`,
-        limit: rule,
+        limit: route.rateLimit,
         windowMs: config.RATE_LIMIT_WINDOW_MS,
       });
     }
 
-    await handler(req, res);
+    await route.handler(req, res);
   } catch (error) {
     const err = toHttpError(error);
     if (isHttpError(err)) {
@@ -172,7 +265,7 @@ function applyCors(req: IncomingMessage, res: ServerResponse): void {
   res.setHeader('access-control-allow-methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
   res.setHeader(
     'access-control-allow-headers',
-    'content-type,x-user-id,x-request-id,x-trace-id,x-idempotency-key,x-game-server-key,x-pix-webhook-key',
+    'authorization,content-type,x-user-id,x-request-id,x-trace-id,x-idempotency-key,x-game-server-key,x-pix-webhook-key,x-metrics-key',
   );
 }
 
@@ -181,6 +274,22 @@ function parseAllowedOrigins(value: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function enforceMetricsAccess(req: IncomingMessage): void {
+  if (config.NODE_ENV !== 'production') {
+    return;
+  }
+
+  if (!config.METRICS_INTERNAL_ENABLED) {
+    throw new HttpError(404, 'not_found', 'Not found');
+  }
+
+  const headerValue = req.headers['x-metrics-key'];
+  const provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  if (!provided || provided !== config.METRICS_INTERNAL_KEY) {
+    throw new HttpError(401, 'unauthorized', 'Metrics key invalida');
+  }
 }
 
 function toHttpError(error: unknown): Error | HttpError {

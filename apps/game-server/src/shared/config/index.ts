@@ -2,6 +2,24 @@ import { z } from 'zod';
 import { REALTIME_PROTOCOL_VERSION } from '@slithermoney/contracts';
 import { loadEnv } from '@slithermoney/shared';
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return value;
+}, z.boolean());
+
+const DEV_RUN_JOIN_TOKEN_SECRET = 'dev-run-join-token-secret';
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -25,6 +43,9 @@ const schema = z.object({
   PONG_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   API_BASE_URL: z.string().default('http://localhost:3000'),
   GAME_SERVER_WEBHOOK_KEY: z.string().optional().default(''),
+  RUN_JOIN_TOKEN_SECRET: z.string().optional().default(DEV_RUN_JOIN_TOKEN_SECRET),
+  METRICS_INTERNAL_ENABLED: booleanFromEnv.default(false),
+  METRICS_INTERNAL_KEY: z.string().optional().default(''),
   API_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   CASHOUT_HOLD_MS: z.coerce.number().int().positive().default(3000),
 });
@@ -54,6 +75,35 @@ export const config: GameServerConfig = loadEnv(schema, {
   PONG_TIMEOUT_MS: 30000,
   API_BASE_URL: 'http://localhost:3000',
   GAME_SERVER_WEBHOOK_KEY: '',
+  RUN_JOIN_TOKEN_SECRET: DEV_RUN_JOIN_TOKEN_SECRET,
+  METRICS_INTERNAL_ENABLED: false,
+  METRICS_INTERNAL_KEY: '',
   API_REQUEST_TIMEOUT_MS: 5000,
   CASHOUT_HOLD_MS: 3000,
 });
+
+assertProductionSecurityConfig(config);
+
+function assertProductionSecurityConfig(current: GameServerConfig): void {
+  if (current.NODE_ENV !== 'production') {
+    return;
+  }
+
+  const missing: string[] = [];
+  if (!current.GAME_SERVER_WEBHOOK_KEY) {
+    missing.push('GAME_SERVER_WEBHOOK_KEY');
+  }
+  if (
+    !current.RUN_JOIN_TOKEN_SECRET ||
+    current.RUN_JOIN_TOKEN_SECRET === DEV_RUN_JOIN_TOKEN_SECRET
+  ) {
+    missing.push('RUN_JOIN_TOKEN_SECRET');
+  }
+  if (current.METRICS_INTERNAL_ENABLED && !current.METRICS_INTERNAL_KEY) {
+    missing.push('METRICS_INTERNAL_KEY');
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required production security config: ${missing.join(', ')}`);
+  }
+}

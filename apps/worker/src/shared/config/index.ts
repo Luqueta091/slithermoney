@@ -1,6 +1,22 @@
 import { z } from 'zod';
 import { loadEnv } from '@slithermoney/shared';
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return value;
+}, z.boolean());
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   SERVICE_NAME: z.string().default('worker'),
@@ -14,6 +30,8 @@ const schema = z.object({
   BSPAY_CLIENT_ID: z.string().optional().default(''),
   BSPAY_CLIENT_SECRET: z.string().optional().default(''),
   BSPAY_POSTBACK_URL: z.string().optional().default(''),
+  METRICS_INTERNAL_ENABLED: booleanFromEnv.default(false),
+  METRICS_INTERNAL_KEY: z.string().optional().default(''),
   HEARTBEAT_MS: z.coerce.number().int().positive().default(30000),
   PIX_WITHDRAWAL_POLL_MS: z.coerce.number().int().positive().default(10000),
   PIX_DEPOSIT_EXPIRATION_MS: z.coerce.number().int().positive().default(1800000),
@@ -38,6 +56,8 @@ export const config: WorkerConfig = loadEnv(schema, {
   BSPAY_CLIENT_ID: '',
   BSPAY_CLIENT_SECRET: '',
   BSPAY_POSTBACK_URL: '',
+  METRICS_INTERNAL_ENABLED: false,
+  METRICS_INTERNAL_KEY: '',
   HEARTBEAT_MS: 30000,
   PIX_WITHDRAWAL_POLL_MS: 10000,
   PIX_DEPOSIT_EXPIRATION_MS: 1800000,
@@ -46,3 +66,23 @@ export const config: WorkerConfig = loadEnv(schema, {
   PIX_RECONCILIATION_LOOKBACK_HOURS: 24,
   PIX_RECONCILIATION_BATCH_SIZE: 50,
 });
+
+assertProductionSecurityConfig(config);
+
+function assertProductionSecurityConfig(current: WorkerConfig): void {
+  if (current.NODE_ENV !== 'production') {
+    return;
+  }
+
+  if (current.METRICS_INTERNAL_ENABLED && !current.METRICS_INTERNAL_KEY) {
+    throw new Error('Missing required production security config: METRICS_INTERNAL_KEY');
+  }
+
+  if (
+    current.PIX_PROVIDER === 'bspay' &&
+    current.BSPAY_POSTBACK_URL &&
+    !current.BSPAY_POSTBACK_URL.includes('token=')
+  ) {
+    throw new Error('BSPAY_POSTBACK_URL must include webhook token query parameter');
+  }
+}

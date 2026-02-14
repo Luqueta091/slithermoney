@@ -10,7 +10,7 @@ export async function handleGetProfileMe(
   _req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('read');
   const account = await prisma.account.findUnique({
     where: { id: accountId },
     select: {
@@ -33,7 +33,7 @@ export async function handleUpdateProfileMe(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('write');
   const body = await readJson<unknown>(req);
   const parsed = updateProfileInputSchema.safeParse(body);
 

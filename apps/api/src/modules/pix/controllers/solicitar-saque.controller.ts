@@ -30,7 +30,7 @@ export async function handlePixWithdrawalRequest(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const accountId = requireAccountId();
+  const accountId = requireAccountId('write');
   const body = await readJson<unknown>(req);
   const parsed = solicitarSaqueInputSchema.safeParse(body);
 

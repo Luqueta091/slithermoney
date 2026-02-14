@@ -31,6 +31,13 @@ const server = http.createServer((req, res) => {
   }
 
   if (method === 'GET' && url.pathname === '/metrics') {
+    if (!canAccessMetrics(req)) {
+      res.statusCode = 404;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'not_found' }));
+      return;
+    }
+
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
     res.end(
@@ -153,3 +160,17 @@ const shutdown = (signal: string) => {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+function canAccessMetrics(req: http.IncomingMessage): boolean {
+  if (config.NODE_ENV !== 'production') {
+    return true;
+  }
+
+  if (!config.METRICS_INTERNAL_ENABLED) {
+    return false;
+  }
+
+  const header = req.headers['x-metrics-key'];
+  const key = Array.isArray(header) ? header[0] : header;
+  return Boolean(key && key === config.METRICS_INTERNAL_KEY);
+}
