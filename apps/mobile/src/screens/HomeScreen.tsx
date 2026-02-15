@@ -194,6 +194,7 @@ export function HomeScreen(): JSX.Element {
     return (
       <GameScreen
         run={run}
+        accountId={accountId}
         onExit={() => {
           setRun(null);
           setTab('lobby');

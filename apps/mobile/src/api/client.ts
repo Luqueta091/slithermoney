@@ -240,37 +240,45 @@ export async function startRun(
 }
 
 export async function reportRunCashout(input: {
+  accountId: string;
   runId: string;
   multiplier: number;
   sizeScore?: number;
 }): Promise<RunCashoutEventResponse> {
-  return apiRequest<RunCashoutEventResponse>('/runs/events/cashout', {
-    method: 'POST',
-    body: JSON.stringify({
-      runId: input.runId,
-      eventVersion: 1,
-      multiplier: input.multiplier,
-      sizeScore: input.sizeScore,
-    }),
-  });
+  return apiRequest<RunCashoutEventResponse>(
+    '/runs/offline/cashout',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        runId: input.runId,
+        multiplier: input.multiplier,
+        sizeScore: input.sizeScore,
+      }),
+    },
+    input.accountId,
+  );
 }
 
 export async function reportRunEliminated(input: {
+  accountId: string;
   runId: string;
   reason: string;
   multiplier?: number;
   sizeScore?: number;
 }): Promise<RunEliminatedEventResponse> {
-  return apiRequest<RunEliminatedEventResponse>('/runs/events/eliminated', {
-    method: 'POST',
-    body: JSON.stringify({
-      runId: input.runId,
-      eventVersion: 1,
-      reason: input.reason,
-      multiplier: input.multiplier,
-      sizeScore: input.sizeScore,
-    }),
-  });
+  return apiRequest<RunEliminatedEventResponse>(
+    '/runs/offline/eliminated',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        runId: input.runId,
+        reason: input.reason,
+        multiplier: input.multiplier,
+        sizeScore: input.sizeScore,
+      }),
+    },
+    input.accountId,
+  );
 }
 
 export async function listLedger(

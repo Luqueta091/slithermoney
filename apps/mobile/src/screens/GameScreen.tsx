@@ -23,6 +23,7 @@ import { formatCents } from '../utils/format';
 
 type GameScreenProps = {
   run: RunStartResponse | null;
+  accountId: string;
   onExit: () => void;
 };
 
@@ -107,7 +108,7 @@ const PERF = {
   leaderboardHz: 4,
 };
 
-const OFFLINE_MODE = String(import.meta.env.VITE_GAME_OFFLINE ?? '').toLowerCase() === 'true';
+const OFFLINE_MODE = String(import.meta.env.VITE_GAME_OFFLINE ?? 'true').toLowerCase() !== 'false';
 const OFFLINE_BOT_COUNT = 20;
 const OFFLINE_TICK_RATE = 72;
 const OFFLINE_INPUT_HZ = 60;
@@ -120,7 +121,7 @@ const NET = {
 };
 const MOBILE_ZOOM_OUT_FACTOR = 0.82;
 
-export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
+export function GameScreen({ run, accountId, onExit }: GameScreenProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -481,6 +482,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     setCashoutPending(false);
     if (OFFLINE_MODE && runIdRef.current) {
       void reportRunEliminated({
+        accountId,
         runId: runIdRef.current,
         reason: data?.reason ?? 'eliminated',
         multiplier:
@@ -840,6 +842,7 @@ export function GameScreen({ run, onExit }: GameScreenProps): JSX.Element {
     setCashoutPending(canReportCashout);
     if (canReportCashout) {
       void reportRunCashout({
+        accountId,
         runId: reportRunId,
         multiplier: fallbackMultiplier,
         sizeScore: fallbackLength ?? undefined,

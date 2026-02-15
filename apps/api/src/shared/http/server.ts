@@ -17,6 +17,10 @@ import { handlePixWithdrawalRequest } from '../../modules/pix/controllers/solici
 import { handlePixTransactionsMe } from '../../modules/pix/controllers/pix-transactions.controller';
 import { handleStartRun } from '../../modules/runs/controllers/runs.controller';
 import { handleRunCashout, handleRunEliminated } from '../../modules/runs/controllers/run-events.controller';
+import {
+  handleOfflineRunCashout,
+  handleOfflineRunEliminated,
+} from '../../modules/runs/controllers/run-offline.controller';
 import { handleRunsMe } from '../../modules/runs/controllers/runs-list.controller';
 import { handleListStakes } from '../../modules/stakes/controllers/stakes.controller';
 import {
@@ -152,6 +156,16 @@ const routes: Record<string, RouteConfig> = {
   'GET /runs/me': {
     auth: 'read',
     handler: handleRunsMe,
+  },
+  'POST /runs/offline/cashout': {
+    auth: 'write',
+    handler: handleOfflineRunCashout,
+    rateLimit: config.RATE_LIMIT_RUNS_MAX,
+  },
+  'POST /runs/offline/eliminated': {
+    auth: 'write',
+    handler: handleOfflineRunEliminated,
+    rateLimit: config.RATE_LIMIT_RUNS_MAX,
   },
   'POST /runs/events/eliminated': {
     auth: 'public',
