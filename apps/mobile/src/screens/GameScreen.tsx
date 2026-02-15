@@ -107,7 +107,7 @@ const PERF = {
   leaderboardHz: 4,
 };
 
-const OFFLINE_MODE = true;
+const OFFLINE_MODE = String(import.meta.env.VITE_GAME_OFFLINE ?? '').toLowerCase() === 'true';
 const OFFLINE_BOT_COUNT = 20;
 const OFFLINE_TICK_RATE = 72;
 const OFFLINE_INPUT_HZ = 60;
