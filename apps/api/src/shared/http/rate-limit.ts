@@ -1,27 +1,47 @@
 import { IncomingMessage } from 'http';
 import { getRequestContext } from '@slithermoney/shared';
+import { prisma } from '../database/prisma';
+import { logger } from '../observability/logger';
 import { HttpError } from './http-error';
 
-type RateLimitBucket = {
-  count: number;
-  resetAt: number;
-};
-
-const buckets = new Map<string, RateLimitBucket>();
-
-export function enforceRateLimit(options: { key: string; limit: number; windowMs: number }): void {
+export async function enforceRateLimit(options: {
+  key: string;
+  limit: number;
+  windowMs: number;
+}): Promise<void> {
   const now = Date.now();
-  const bucket = buckets.get(options.key);
+  const windowStartMs = now - (now % options.windowMs);
+  const windowStart = new Date(windowStartMs);
+  const expiresAt = new Date(windowStartMs + options.windowMs * 2);
+  const counter = await prisma.rateLimitCounter.upsert({
+    where: {
+      bucketKey_windowStart: {
+        bucketKey: options.key,
+        windowStart,
+      },
+    },
+    create: {
+      bucketKey: options.key,
+      windowStart,
+      count: 1,
+      expiresAt,
+    },
+    update: {
+      count: {
+        increment: 1,
+      },
+      expiresAt,
+    },
+    select: {
+      count: true,
+    },
+  });
 
-  if (!bucket || bucket.resetAt <= now) {
-    buckets.set(options.key, { count: 1, resetAt: now + options.windowMs });
-    return;
-  }
-
-  bucket.count += 1;
-  if (bucket.count > options.limit) {
+  if (counter.count > options.limit) {
     throw new HttpError(429, 'rate_limited', 'Muitas requisições, tente novamente');
   }
+
+  maybePruneExpiredRateLimitCounters();
 }
 
 export function getRateLimitIdentifier(req: IncomingMessage): string {
@@ -39,4 +59,24 @@ export function getRateLimitIdentifier(req: IncomingMessage): string {
   }
 
   return `ip:${req.socket.remoteAddress ?? 'unknown'}`;
+}
+
+function maybePruneExpiredRateLimitCounters(): void {
+  if (Math.random() > 0.01) {
+    return;
+  }
+
+  void prisma.rateLimitCounter
+    .deleteMany({
+      where: {
+        expiresAt: {
+          lt: new Date(),
+        },
+      },
+    })
+    .catch((error) => {
+      logger.warn('rate_limit_prune_failed', {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      });
+    });
 }

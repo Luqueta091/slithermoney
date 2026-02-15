@@ -3,6 +3,13 @@ import { HttpError } from './http-error';
 import { config } from '../config';
 
 export async function readJson<T>(req: IncomingMessage): Promise<T> {
+  const { parsed } = await readJsonWithRaw<T>(req);
+  return parsed;
+}
+
+export async function readJsonWithRaw<T>(
+  req: IncomingMessage,
+): Promise<{ parsed: T; raw: string }> {
   const contentLength = req.headers['content-length'];
   if (typeof contentLength === 'string') {
     const parsedLength = Number.parseInt(contentLength, 10);
@@ -30,7 +37,10 @@ export async function readJson<T>(req: IncomingMessage): Promise<T> {
   }
 
   try {
-    return JSON.parse(raw) as T;
+    return {
+      parsed: JSON.parse(raw) as T,
+      raw,
+    };
   } catch {
     throw new HttpError(400, 'invalid_json', 'Request body must be valid JSON');
   }

@@ -8,3 +8,4 @@ export {
 } from './observability/request-context';
 export { loadEnv } from './env';
 export { signToken, verifyToken, type TokenValidationResult } from './auth/token';
+export { signRunEventPayload } from './security/run-event-signature';

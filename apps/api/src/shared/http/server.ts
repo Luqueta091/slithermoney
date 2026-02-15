@@ -156,10 +156,12 @@ const routes: Record<string, RouteConfig> = {
   'POST /runs/events/eliminated': {
     auth: 'public',
     handler: handleRunEliminated,
+    rateLimit: config.RATE_LIMIT_WEBHOOK_MAX,
   },
   'POST /runs/events/cashout': {
     auth: 'public',
     handler: handleRunCashout,
+    rateLimit: config.RATE_LIMIT_WEBHOOK_MAX,
   },
 };
 
@@ -228,7 +230,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
     if (route.rateLimit) {
       const identifier = getRateLimitIdentifier(req);
-      enforceRateLimit({
+      await enforceRateLimit({
         key: `${key}:${identifier}`,
         limit: route.rateLimit,
         windowMs: config.RATE_LIMIT_WINDOW_MS,
@@ -265,7 +267,7 @@ function applyCors(req: IncomingMessage, res: ServerResponse): void {
   res.setHeader('access-control-allow-methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
   res.setHeader(
     'access-control-allow-headers',
-    'authorization,content-type,x-user-id,x-request-id,x-trace-id,x-idempotency-key,x-game-server-key,x-pix-webhook-key,x-metrics-key',
+    'authorization,content-type,x-user-id,x-request-id,x-trace-id,x-idempotency-key,x-game-server-key,x-run-event-timestamp,x-run-event-nonce,x-run-event-signature,x-pix-webhook-key,x-metrics-key',
   );
 }
 

@@ -1,5 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http';
-import { readJson } from '../../../shared/http/body';
+import { readJsonWithRaw } from '../../../shared/http/body';
 import { sendJson } from '../../../shared/http/response';
 import { HttpError } from '../../../shared/http/http-error';
 import { prisma } from '../../../shared/database/prisma';
@@ -12,6 +12,7 @@ import { runEliminatedInputSchema, RunEliminatedResponse } from '../dtos/run-eli
 import { runCashoutInputSchema, RunCashoutResponse } from '../dtos/run-cashout.dto';
 import { RunsRepositoryPrisma } from '../repository/runs.repository.impl';
 import { RunsService } from '../services/runs.service';
+import { enforceRunEventsAuth } from '../services/run-events-auth.service';
 
 const walletRepository = new CarteirasRepositoryPrisma(prisma);
 const ledgerRepository = new LedgerRepositoryPrisma(prisma);
@@ -24,22 +25,22 @@ export async function handleRunEliminated(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  enforceGameServerKey(req);
+  const { raw, parsed } = await readJsonWithRaw<unknown>(req);
+  await enforceRunEventsAuth(req, raw);
 
-  const body = await readJson<unknown>(req);
-  const parsed = runEliminatedInputSchema.safeParse(body);
+  const validated = runEliminatedInputSchema.safeParse(parsed);
 
-  if (!parsed.success) {
+  if (!validated.success) {
     throw new HttpError(400, 'validation_error', 'Payload invalido', {
-      issues: parsed.error.flatten(),
+      issues: validated.error.flatten(),
     });
   }
 
   const run = await service.eliminateRun({
-    runId: parsed.data.runId,
-    reason: parsed.data.reason,
-    sizeScore: parsed.data.sizeScore,
-    multiplier: parsed.data.multiplier,
+    runId: validated.data.runId,
+    reason: validated.data.reason,
+    sizeScore: validated.data.sizeScore,
+    multiplier: validated.data.multiplier,
   });
 
   sendJson(res, 200, mapResponse(run));
@@ -49,22 +50,22 @@ export async function handleRunCashout(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  enforceGameServerKey(req);
+  const { raw, parsed } = await readJsonWithRaw<unknown>(req);
+  await enforceRunEventsAuth(req, raw);
 
-  const body = await readJson<unknown>(req);
-  const parsed = runCashoutInputSchema.safeParse(body);
+  const validated = runCashoutInputSchema.safeParse(parsed);
 
-  if (!parsed.success) {
+  if (!validated.success) {
     throw new HttpError(400, 'validation_error', 'Payload invalido', {
-      issues: parsed.error.flatten(),
+      issues: validated.error.flatten(),
     });
   }
 
   const run = await service.cashoutRun(
     {
-      runId: parsed.data.runId,
-      multiplier: parsed.data.multiplier,
-      sizeScore: parsed.data.sizeScore,
+      runId: validated.data.runId,
+      multiplier: validated.data.multiplier,
+      sizeScore: validated.data.sizeScore,
     },
     { feeBps: config.CASHOUT_FEE_BPS },
   );
@@ -72,18 +73,6 @@ export async function handleRunCashout(
   await maybeFlagHighCashout(run);
 
   sendJson(res, 200, mapCashoutResponse(run));
-}
-
-function enforceGameServerKey(req: IncomingMessage): void {
-  if (!config.GAME_SERVER_WEBHOOK_KEY) {
-    return;
-  }
-
-  const headerValue = req.headers['x-game-server-key'];
-
-  if (!headerValue || Array.isArray(headerValue) || headerValue !== config.GAME_SERVER_WEBHOOK_KEY) {
-    throw new HttpError(401, 'unauthorized', 'Chave inválida');
-  }
 }
 
 function mapResponse(run: {
