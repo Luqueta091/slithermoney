@@ -1,5 +1,6 @@
 import { IncomingMessage } from 'http';
-import { getRequestContext } from '@slithermoney/shared';
+import { extractClientIp, getRequestContext } from '@slithermoney/shared';
+import { config } from '../config';
 import { prisma } from '../database/prisma';
 import { logger } from '../observability/logger';
 import { HttpError } from './http-error';
@@ -50,15 +51,11 @@ export function getRateLimitIdentifier(req: IncomingMessage): string {
     return `user:${user_id}`;
   }
 
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
-    const [first] = forwardedFor.split(',');
-    if (first?.trim()) {
-      return `ip:${first.trim()}`;
-    }
-  }
-
-  return `ip:${req.socket.remoteAddress ?? 'unknown'}`;
+  const clientIp = extractClientIp(req, {
+    trustProxyEnabled: config.TRUST_PROXY_ENABLED,
+    trustedProxyCidrs: parseTrustedProxyCidrs(config.TRUST_PROXY_CIDRS),
+  });
+  return `ip:${clientIp}`;
 }
 
 function maybePruneExpiredRateLimitCounters(): void {
@@ -79,4 +76,11 @@ function maybePruneExpiredRateLimitCounters(): void {
         error: error instanceof Error ? error.message : 'unknown_error',
       });
     });
+}
+
+function parseTrustedProxyCidrs(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }

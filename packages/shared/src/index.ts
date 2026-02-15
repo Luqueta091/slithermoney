@@ -9,3 +9,4 @@ export {
 export { loadEnv } from './env';
 export { signToken, verifyToken, type TokenValidationResult } from './auth/token';
 export { signRunEventPayload } from './security/run-event-signature';
+export { extractClientIp } from './network/client-ip';
