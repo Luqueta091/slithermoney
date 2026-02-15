@@ -14,6 +14,8 @@ import { RunsRepositoryPrisma } from '../repository/runs.repository.impl';
 import { RunsService } from '../services/runs.service';
 import { enforceRunEventsAuth } from '../services/run-events-auth.service';
 
+const HOUSE_FEE_BPS = 1000;
+
 const walletRepository = new CarteirasRepositoryPrisma(prisma);
 const ledgerRepository = new LedgerRepositoryPrisma(prisma);
 const ledgerService = new LedgerService(ledgerRepository);
@@ -67,7 +69,7 @@ export async function handleRunCashout(
       multiplier: validated.data.multiplier,
       sizeScore: validated.data.sizeScore,
     },
-    { feeBps: config.CASHOUT_FEE_BPS },
+    { feeBps: HOUSE_FEE_BPS },
   );
 
   await maybeFlagHighCashout(run);

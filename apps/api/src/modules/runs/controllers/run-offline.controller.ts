@@ -1,6 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { prisma } from '../../../shared/database/prisma';
-import { config } from '../../../shared/config';
 import { readJson } from '../../../shared/http/body';
 import { HttpError } from '../../../shared/http/http-error';
 import { requireAccountId } from '../../../shared/http/account';
@@ -14,6 +13,8 @@ import {
   runOfflineCashoutInputSchema,
   runOfflineEliminatedInputSchema,
 } from '../dtos/run-offline.dto';
+
+const HOUSE_FEE_BPS = 1000;
 
 const walletRepository = new CarteirasRepositoryPrisma(prisma);
 const ledgerRepository = new LedgerRepositoryPrisma(prisma);
@@ -42,7 +43,7 @@ export async function handleOfflineRunCashout(
       multiplier: validated.data.multiplier,
       sizeScore: validated.data.sizeScore,
     },
-    { feeBps: config.CASHOUT_FEE_BPS },
+    { feeBps: HOUSE_FEE_BPS },
   );
 
   sendJson(res, 200, {
