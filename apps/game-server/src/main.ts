@@ -164,7 +164,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
   socket.on('close', (code: number, reason: Buffer) => {
     const stats = arenaManager.getPlayerStats(playerId);
     const runId = context.runId;
-    if (context.cashoutTimer) {
+    if (context.cashoutTimer && context.cashoutState !== 'holding') {
       clearTimeout(context.cashoutTimer);
     }
 
@@ -173,7 +173,12 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
     arenaManager.removePlayer(playerId);
     recordDisconnect();
 
-    if (runId && context.state === 'joined' && !context.wasEliminated) {
+    if (
+      runId &&
+      context.state === 'joined' &&
+      context.cashoutState === 'idle' &&
+      !context.wasEliminated
+    ) {
       void notifyRunEliminated({
         runId,
         reason: 'disconnect',
@@ -283,6 +288,11 @@ type ConnectionContext = {
   lastPongAt: number;
   cashoutState: 'idle' | 'holding' | 'done';
   cashoutTimer?: NodeJS.Timeout;
+  pendingCashout?: {
+    runId: string;
+    multiplier: number;
+    sizeScore: number;
+  };
   wasEliminated?: boolean;
 };
 
@@ -372,7 +382,7 @@ function handleJoin(context: ConnectionContext, payload?: JoinPayload): void {
 }
 
 function handleInput(context: ConnectionContext, payload?: InputPayload): void {
-  if (context.state !== 'joined' || !payload) {
+  if (context.state !== 'joined' || context.cashoutState !== 'idle' || !payload) {
     return;
   }
 
@@ -408,8 +418,22 @@ function handleCashoutRequest(
     return;
   }
 
+  const stats = arenaManager.getPlayerStats(context.playerId);
+  if (!stats) {
+    sendError(context.socket, 'run_not_found', 'Run não encontrada');
+    return;
+  }
+
   context.cashoutState = 'holding';
   context.runId = runId;
+  context.pendingCashout = {
+    runId,
+    multiplier: stats.multiplier,
+    sizeScore: stats.sizeScore,
+  };
+  context.state = 'ended';
+  context.wasEliminated = true;
+  arenaManager.removePlayer(context.playerId);
 
   sendMessage(context.socket, {
     type: 'CASHOUT_HOLD',
@@ -419,26 +443,31 @@ function handleCashoutRequest(
   });
 
   context.cashoutTimer = setTimeout(() => {
-    const stats = arenaManager.getPlayerStats(context.playerId);
-    if (!stats || context.state !== 'joined') {
+    const pendingCashout = context.pendingCashout;
+    if (!pendingCashout) {
       context.cashoutState = 'idle';
       return;
     }
 
     context.cashoutState = 'done';
     void notifyRunCashout({
-      runId,
-      multiplier: stats.multiplier,
-      sizeScore: stats.sizeScore,
+      runId: pendingCashout.runId,
+      multiplier: pendingCashout.multiplier,
+      sizeScore: pendingCashout.sizeScore,
     });
 
-    sendMessage(context.socket, {
-      type: 'CASHOUT_RESULT',
-      payload: {
-        run_id: runId,
-        multiplier: stats.multiplier,
-        status: 'ok',
-      },
-    });
+    if (context.socket.readyState === WebSocket.OPEN) {
+      sendMessage(context.socket, {
+        type: 'CASHOUT_RESULT',
+        payload: {
+          run_id: pendingCashout.runId,
+          multiplier: pendingCashout.multiplier,
+          status: 'ok',
+        },
+      });
+    }
+
+    context.pendingCashout = undefined;
+    context.cashoutTimer = undefined;
   }, config.CASHOUT_HOLD_MS);
 }
